@@ -95,6 +95,7 @@ body {
   letter-spacing: 1.5px;
   text-transform: uppercase;
   background: linear-gradient(135deg, #ffffff 40%, var(--text-muted) 100%);
+  background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -443,6 +444,7 @@ body {
   letter-spacing: 1px;
   text-transform: uppercase;
   background: linear-gradient(135deg, #ffffff 0%, #a2b0bc 100%);
+  background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
