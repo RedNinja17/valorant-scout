@@ -8,16 +8,25 @@ let main;
 let auto = null;
 
 function getLockfile() {
+    const localAppData = process.env.LOCALAPPDATA || path.join(process.env.USERPROFILE, 'AppData', 'Local');
     const filePath = path.join(
-        process.env.LOCALAPPDATA,
-        'Riot Games\\RiotClient\\Config\\lockfile'
+        localAppData,
+        'Riot Games',
+        'Riot Client',
+        'Config',
+        'lockfile'
     );
 
     if (!fs.existsSync(filePath)) {
-        throw new Error('Valorant is not running.');
+        throw new Error(`Lockfile not found at ${filePath}. Check permissions or app path.`);
     }
 
-    const content = fs.readFileSync(filePath, 'utf8');
+    let content = '';
+    try {
+        content = fs.readFileSync(filePath, 'utf8');
+    } catch (e) {
+        throw new Error('Lockfile is currently locked by another process.');
+    }
     const [name, pid, port, password, protocol] = content.split(':');
     const auth = Buffer.from(`riot:${password}`).toString('base64');
 
@@ -36,44 +45,66 @@ async function fetchLocal(urlPath) {
 
 async function getAuthTokens() {
     const data = await fetchLocal('/entitlements/v1/token');
-    const sessions = await fetchLocal('/product-session/v1/external-sessions');
     let region = 'na';
 
-    const session = Object.values(sessions).find(s => s.productId === 'valorant');
-    if (session && session.launchArguments) {
-        const arg = session.launchArguments.find(a => a.startsWith('-ares-deployment='));
-        if (arg) region = arg.split('=')[1];
+    try {
+        const sessions = await fetchLocal('/product-session/v1/external-sessions');
+        const session = Object.values(sessions || {}).find(s => s?.productId === 'valorant');
+        if (session?.launchArguments) {
+            const arg = session.launchArguments.find(a => a?.startsWith('-ares-deployment='));
+            if (arg) region = arg.split('=')[1];
+        }
+    } catch (e) {
+    }
+
+    if (region === 'latam' || region === 'br') region = 'na';
+
+    let clientVersion = '';
+    try {
+        const versionRes = await axios.get('https://valorant-api.com/v1/version');
+        clientVersion = versionRes.data.data.riotClientVersion;
+    } catch (e) {
     }
 
     return {
         accessToken: data.accessToken,
         entitlementsToken: data.token,
         puuid: data.subject,
-        region: region
+        region: region,
+        clientVersion: clientVersion
     };
 }
 
 async function getPlayers() {
     try {
-        const { accessToken, entitlementsToken, puuid, region } = await getAuthTokens();
-        
+        const { accessToken, entitlementsToken, puuid, region, clientVersion } = await getAuthTokens();
+
         const remoteHeaders = {
             'Authorization': `Bearer ${accessToken}`,
             'X-Riot-Entitlements-JWT': entitlementsToken,
+            'X-Riot-ClientVersion': clientVersion,
             'X-Riot-ClientPlatform': 'ew0KCSJwbGF0Zm9ybVR5cGUiOiAiUEMiLA0KCSJwbGF0Zm9ybU9TIjogIldpbmRvd3MiLA0KCSJwbGF0Zm9ybU9TVmVyc2lvbiI6ICIxMC4wLjE5MDQyLjEuMjU2LjY0Yml0IiwNCgkicGxhdGZvcm1DaGlwc2V0IjogIlVua25vd24iDQp9'
         };
 
         const glzUrl = `https://glz-${region}-1.${region}.a.pvp.net`;
         const pdUrl = `https://pd.${region}.a.pvp.net`;
 
-        const selfNameRes = await axios.put(`${pdUrl}/name-service/v2/players`, [puuid], { headers: remoteHeaders });
-        const selfInfo = selfNameRes.data[0];
-        const selfPlayer = {
-            name: `${selfInfo.GameName} (You)`,
-            tag: selfInfo.TagLine,
-            team: 'Blue',
-            url: `https://tracker.gg/valorant/profile/riot/${encodeURIComponent(selfInfo.GameName)}%23${encodeURIComponent(selfInfo.TagLine)}/overview`
-        };
+        let selfPlayer = { name: 'You', tag: '', team: 'Blue', url: '#' };
+        let selfInfo = { GameName: '', TagLine: '' };
+
+        try {
+            const selfNameRes = await axios.put(`${pdUrl}/name-service/v2/players`, [puuid], { headers: remoteHeaders });
+            if (selfNameRes.data && selfNameRes.data[0]) {
+                selfInfo = selfNameRes.data[0];
+                selfPlayer = {
+                    name: `${selfInfo.GameName} (You)`,
+                    tag: selfInfo.TagLine,
+                    team: 'Blue',
+                    url: `https://tracker.gg/valorant/profile/riot/${encodeURIComponent(selfInfo.GameName)}%23${encodeURIComponent(selfInfo.TagLine)}/overview`
+                };
+            }
+        } catch (e) {
+        }
 
         let matchId = null;
         let isPregame = false;
@@ -98,13 +129,13 @@ async function getPlayers() {
         const teamMap = {};
 
         if (isPregame) {
-            const myTeam = matchData.data.Teams.find(t => t.Players.some(p => p.Subject === puuid));
-            if (myTeam) {
+            const myTeam = matchData.data?.Teams?.find(t => t.Players?.some(p => p.Subject === puuid));
+            if (myTeam?.Players) {
                 playersData = myTeam.Players;
                 playersData.forEach(p => teamMap[p.Subject] = 'Blue');
             }
         } else {
-            playersData = matchData.data.Players || [];
+            playersData = matchData.data?.Players || [];
             playersData.forEach(p => teamMap[p.Subject] = p.TeamID);
         }
 
@@ -139,6 +170,7 @@ function createWindow() {
         title: "Valorant Scout",
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
+            rejectUnauthorized: false,
             nodeIntegration: false,
             contextIsolation: true,
             webviewTag: true
@@ -156,6 +188,11 @@ function createWindow() {
         } catch (err) {
         }
     }, 10000);
+
+    main.on('closed', () => {
+        if (auto) clearInterval(auto);
+        main = null;
+    });
 }
 
 app.whenReady().then(createWindow);
@@ -167,8 +204,12 @@ app.on('window-all-closed', () => {
 
 ipcMain.handle('fetch-players', async () => {
     try {
-        return await getPlayers();
+        const players = await getPlayers();
+        return { success: true, data: players };
     } catch (err) {
-        return { error: err.message };
+        return {
+            success: false,
+            error: err.stack || err.message || 'Unknown main process error'
+        };
     }
 });

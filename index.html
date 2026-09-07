@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Valorant Scout</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+    <!-- Top Action Bar -->
+    <header id="top-bar">
+        <div class="left-controls">
+            <button id="back-btn" onclick="goBackInActiveTab()">← Back</button>
+            <button id="refresh-btn" onclick="manualRefresh()">🔄 Sync Lobby</button>
+        </div>
+        <div id="status-text">Connecting to Valorant...</div>
+    </header>
+
+    <!-- Dynamic Player Tabs -->
+    <nav id="tabs-bar">
+        <!-- Buttons generated via JS -->
+    </nav>
+
+    <!-- Webview / Iframe Containers -->
+    <main id="views-container">
+        <div class="empty-state">Loading lobby data...</div>
+    </main>
+
+    <script src="renderer.js"></script>
+</body>
+
+</html>
