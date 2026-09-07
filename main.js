@@ -304,15 +304,26 @@ async function getPlayers() {
 
         const identityMap = {};
         playersData.forEach(p => {
+            const level = p.PlayerIdentity?.AccountLevel;
+            const hidden = p.PlayerIdentity?.HideAccountLevel ?? false;
+
             identityMap[p.Subject] = {
                 agentId: p.CharacterID || null,
-                accountLevel: p.PlayerIdentity?.AccountLevel ?? null,
+                accountLevel: (!hidden && typeof level === 'number' && level > 0) ? level : null,
                 incognito: p.PlayerIdentity?.Incognito ?? false
             };
         });
+        console.log('identity debug', playersData.map(p => ({
+            puuid: p.Subject.slice(0, 8),
+            level: p.PlayerIdentity?.AccountLevel,
+            hidden: p.PlayerIdentity?.HideAccountLevel,
+            incognito: p.PlayerIdentity?.Incognito
+        })));
 
         const puuids = playersData.map(p => p.Subject);
         if (puuids.length === 0) return { matchId: null, mapName: 'Unknown', timestamp: Date.now(), players: [] };
+
+        const orderIndex = new Map(puuids.map((id, i) => [id, i]));
 
         const namesResponse = await axios.put(`${pdUrl}/name-service/v2/players`, puuids, { headers: remoteHeaders });
         const validPlayers = (namesResponse.data || []).filter(p => p.GameName && p.TagLine);
@@ -339,7 +350,16 @@ async function getPlayers() {
             };
         });
 
-        const teammates = matchPlayers.filter(p => p.isMyTeam);
+        matchPlayers.sort((a, b) => {
+            const ai = orderIndex.has(a.puuid) ? orderIndex.get(a.puuid) : Number.MAX_SAFE_INTEGER;
+            const bi = orderIndex.has(b.puuid) ? orderIndex.get(b.puuid) : Number.MAX_SAFE_INTEGER;
+            if (ai !== bi) return ai - bi;
+            return a.puuid.localeCompare(b.puuid);
+        });
+
+        const teammates = matchPlayers
+            .filter(p => p.isMyTeam)
+            .sort((a, b) => (b.isSelf ? 1 : 0) - (a.isSelf ? 1 : 0));
         const opponents = matchPlayers.filter(p => !p.isMyTeam);
         const sortedPlayers = [...teammates, ...opponents];
 

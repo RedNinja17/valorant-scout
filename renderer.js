@@ -356,7 +356,7 @@ function buildPlayerCard(player) {
         metaRow.appendChild(skeleton('92px'));
     }
 
-    if (typeof player.accountLevel === 'number') {
+    if (typeof player.accountLevel === 'number' && player.accountLevel > 0) {
         const lvlEl = document.createElement('span');
         lvlEl.className = 'player-card-level';
         lvlEl.innerText = `Lv ${player.accountLevel}`;
