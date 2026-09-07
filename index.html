@@ -9,43 +9,52 @@
 </head>
 
 <body>
-    <header id="top-bar">
-        <div class="brand">
-            <span class="app-title">VALORANT SCOUT</span>
-        </div>
+    <header class="top-bar">
+        <span class="app-title">Valorant Scout</span>
 
-        <div id="status-container">
-            <span id="status-indicator"></span>
-            <span id="status-text">Connecting to Riot Client...</span>
-        </div>
+        <p class="status">
+            <span class="status-dot" id="status-indicator"></span>
+            <span id="status-text">Connecting to Riot Client…</span>
+        </p>
 
-        <div class="left-controls">
-            <button id="back-btn" onclick="goBackInActiveTab()" title="Go Back">← Back</button>
-            <button id="refresh-btn" onclick="manualRefresh()" title="Sync Lobby Data">🔄 Sync</button>
-            <button id="delete-btn" onclick="deleteActiveMatch()" title="Delete Current Selected Match">🗑️ Delete
-                Match</button>
+        <div class="toolbar">
+            <button type="button" id="overview-btn" title="Back to match overview">Overview</button>
+            <button type="button" id="back-btn" title="Go back in this profile">Back</button>
+            <button type="button" id="refresh-btn" title="Sync lobby data">Sync</button>
+            <button type="button" id="delete-btn" class="danger" title="Delete the selected match">Delete match</button>
         </div>
     </header>
 
-    <!-- Match History Row (Grouped by Date) -->
-    <section id="match-history-bar">
-        <div class="bar-label">MATCHES:</div>
-        <div id="match-tabs-list">
-            <!-- Grouped match items populated via renderer.js -->
-        </div>
+    <section class="match-history">
+        <h2 class="bar-label">Matches</h2>
+        <div id="match-tabs-list"></div>
     </section>
 
-    <!-- Player Sub-Tabs -->
-    <nav id="player-tabs-bar">
-        <!-- Dynamically populated player buttons -->
-    </nav>
+    <nav id="player-tabs-bar" aria-label="Players in this match"></nav>
 
-    <!-- Webview Container -->
-    <main id="views-container">
-        <div class="empty-state">
-            <div class="spinner"></div>
-            <p>Scanning local game client for active matches...</p>
-        </div>
+    <main id="content">
+        <section id="match-overview" hidden>
+            <header class="overview-head">
+                <h2 id="overview-map">Match</h2>
+                <p id="overview-meta"></p>
+            </header>
+
+            <div class="rosters">
+                <section class="roster roster-ally">
+                    <h3 class="roster-title">Your team</h3>
+                    <ol class="roster-list" id="roster-ally"></ol>
+                </section>
+
+                <div class="roster-divider"><span>VS</span></div>
+
+                <section class="roster roster-enemy">
+                    <h3 class="roster-title">Enemy team</h3>
+                    <ol class="roster-list" id="roster-enemy"></ol>
+                </section>
+            </div>
+        </section>
+
+        <div id="views-container"></div>
     </main>
 
     <script src="renderer.js"></script>

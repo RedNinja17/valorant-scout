@@ -9,6 +9,8 @@ let main = null;
 let autoTimeout = null;
 let isPolling = false;
 let mapNameCache = {};
+let matchesDir = null;
+const localHttpsAgent = new https.Agent({ rejectUnauthorized: false });
 
 async function fetchMapNames() {
     try {
@@ -24,13 +26,13 @@ async function fetchMapNames() {
             mapNameCache = cache;
         }
     } catch (e) {
-        console.warn('Failed to fetch dynamic map names:', e.message);
+        console.warn('Failed to fetch map names:', e.message);
     }
 }
 
-function resolveMapName(rawMapPath) {
-    if (!rawMapPath) return 'Unknown Map';
-    const codeName = rawMapPath.split('/').pop().toLowerCase();
+function resolveMapName(rawMapName) {
+    if (!rawMapName) return 'Unknown Map';
+    const codeName = rawMapName.split('/').pop().toLowerCase();
 
     if (mapNameCache[codeName]) {
         return mapNameCache[codeName];
@@ -40,16 +42,18 @@ function resolveMapName(rawMapPath) {
 }
 
 async function getMatchesDir() {
+    if (matchesDir) return matchesDir
     const dir = path.join(app.getPath('userData'), 'matches');
     try {
         await fs.mkdir(dir, { recursive: true });
+        matchesDir = dir;
     } catch (err) {
-        console.error('Failed to create matches directory:', err);
+        console.error('Failed to create matches folder:', err);
     }
     return dir;
 }
 
-async function saveMatchToFile(matchData) {
+async function saveMatches(matchData) {
     try {
         if (!matchData.matchId || matchData.matchId === 'menu') return;
 
@@ -59,39 +63,40 @@ async function saveMatchToFile(matchData) {
 
         await fs.writeFile(filePath, JSON.stringify(matchData, null, 2), 'utf8');
     } catch (e) {
-        console.error('Error saving match file:', e);
+        console.error('Error saving match:', e);
     }
 }
 
-async function loadAllSavedMatches() {
+async function loadMatches() {
     try {
-        const dir = getMatchesDir();
+        const dir = await getMatchesDir();
         const files = await fs.readdir(dir);
         const jsonFiles = files.filter(f => f.endsWith('.json'));
-        const matches = [];
 
-        for (const file of jsonFiles) {
+        const matchPromises = jsonFiles.map(async (file) => {
             try {
                 const filePath = path.join(dir, file);
                 const content = await fs.readFile(filePath, 'utf8');
-                matches.push(JSON.parse(content));
+                return JSON.parse(content);
             } catch (fileErr) {
                 console.error(`Error reading match file ${file}:`, fileErr);
+                return null;
             }
-        }
+        });
 
-        return matches;
+        const matches = await Promise.all(matchPromises);
+        return matches.filter(Boolean);
     } catch (e) {
         console.error('Error loading saved matches:', e);
         return [];
     }
 }
 
-async function deleteMatchFile(matchId) {
+async function deleteSave(matchID) {
     try {
-        if (!matchId) return false;
-        const safeMatchId = path.basename(matchId);
-        const dir = getMatchesDir();
+        if (!matchID) return false;
+        const safeMatchId = path.basename(matchID);
+        const dir = await getMatchesDir();
         const filePath = path.join(dir, `${safeMatchId}.json`);
 
         await fs.unlink(filePath);
@@ -102,19 +107,21 @@ async function deleteMatchFile(matchId) {
     }
 }
 
-function getLockfile() {
+async function getLockfile() {
     const localAppData = process.env.LOCALAPPDATA || path.join(process.env.USERPROFILE || '', 'AppData', 'Local');
     const filePath = path.join(localAppData, 'Riot Games', 'Riot Client', 'Config', 'lockfile');
 
-    if (!fsSync.existsSync(filePath)) {
+    try {
+        await fs.access(filePath);
+    } catch {
         throw new Error(`Lockfile not found at ${filePath}.`);
     }
 
     let content = '';
     try {
-        content = fsSync.readFileSync(filePath, 'utf8');
+        content = await fs.readFile(filePath, 'utf8');
     } catch (e) {
-        throw new Error('Lockfile is locked.');
+        throw new Error('Lockfile is not readable.');
     }
 
     const parts = content.split(':');
@@ -130,11 +137,10 @@ function getLockfile() {
 }
 
 async function fetchLocal(urlPath) {
-    const { port, auth } = getLockfile();
-    const agent = new https.Agent({ rejectUnauthorized: false });
+    const { port, auth } = await getLockfile();
     const response = await axios.get(`https://127.0.0.1:${port}${urlPath}`, {
         headers: { Authorization: `Basic ${auth}` },
-        httpsAgent: agent
+        httpsAgent: localHttpsAgent
     });
     return response.data;
 }
@@ -151,7 +157,7 @@ async function getAuthTokens() {
             if (arg) region = arg.split('=')[1];
         }
     } catch (e) {
-        console.warn('Failed to fetch external product sessions, defaulting region to NA:', e.message);
+        console.warn('Failed to fetch region, defaulting to NA:', e.message);
     }
 
     if (region === 'latam' || region === 'br') region = 'na';
@@ -284,11 +290,11 @@ async function getPlayers() {
             players: sortedPlayers
         };
 
-        await saveMatchToFile(payload);
+        await saveMatches(payload);
         return payload;
 
     } catch (err) {
-        console.error('Error in getPlayers:', err.message);
+        console.error('Error in getPlayers():', err.message);
         return { matchId: null, mapName: 'Error', timestamp: Date.now(), players: [] };
     }
 }
@@ -302,14 +308,19 @@ function setupAdBlocker() {
         '*://*.amazon-adsystem.com/*',
         '*://*.pubmatic.com/*',
         '*://*.criteo.com/*',
-        '*://*.taboola.com/*'
+        '*://*.taboola.com/*',
+        '*://*.compasonline.com/*',
+        '*://*.nitropay.com/*'
     ];
 
-    electronSession.defaultSession.webRequest.onBeforeRequest({ urls: adDomains }, (details, callback) => {
-        callback({ cancel: true });
-    });
+    const block = (sess) => {
+        sess.webRequest.onBeforeRequest({ urls: adDomains }, (details, callback) => {
+            callback({ cancel: true });
+        });
+    };
+    block(electronSession.defaultSession);
+    block(electronSession.fromPartition('persist:tracker'));
 }
-
 let lastMatchSignature = '';
 
 async function pollLobby() {
@@ -386,6 +397,8 @@ async function createWindow() {
     });
 }
 
+app.commandLine.appendSwitch('log-level', '3');
+app.commandLine.appendSwitch('silent-debugger-extension-api');
 app.whenReady().then(createWindow);
 
 app.on('activate', () => {
@@ -413,9 +426,9 @@ ipcMain.handle('fetch-players', async () => {
 });
 
 ipcMain.handle('load-saved-matches', async () => {
-    return await loadAllSavedMatches();
+    return await loadMatches();
 });
 
 ipcMain.handle('delete-match', async (_event, matchId) => {
-    return await deleteMatchFile(matchId);
+    return await deleteSave(matchId);
 });

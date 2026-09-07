@@ -1,7 +1,8 @@
 let activeMatchId = null;
 let activePlayerId = null;
 let userSelectedMatch = false;
-const matchCache = new Map(); // matchid, matchobj
+let showOverview = true;
+const matchCache = new Map();
 
 const MAX_LIVE_VIEWS = 5;
 const view_order = [];
@@ -30,14 +31,14 @@ function destroyView(viewId) {
 function evictStaleViews() {
     const container = document.getElementById('views-container');
     container.querySelectorAll('webview').forEach(v => {
-        if(v.dataset.matchId !== activeMatchId) {
+        if (v.dataset.matchId !== activeMatchId) {
             destroyView(v.id);
         }
     });
     const keep = viewIdFor(activeMatchId, activePlayerId);
-    while(view_order.length > MAX_LIVE_VIEWS) {
+    while (view_order.length > MAX_LIVE_VIEWS) {
         const oldest = view_order.find(id => id !== keep);
-        if(!oldest) break;
+        if (!oldest) break;
         destroyView(oldest);
     }
 }
@@ -63,6 +64,23 @@ function clearEmptyState() {
     if (el) el.remove();
 }
 
+function setStatus(online, message) {
+    document.getElementById('status-indicator').className = online ? 'online' : 'offline';
+    document.getElementById('status-text').innerText = message;
+}
+
+function setStatusText(message) {
+    document.getElementById('status-text').innerText = message;
+}
+
+function displayNameFor(player) {
+    return player.name.endsWith(' (You)') ? player.name.slice(0, -6) : player.name;
+}
+
+function isSelfPlayer(player) {
+    return player.name.endsWith(' (You)');
+}
+
 function formatDateHeader(timestamp) {
     const date = new Date(timestamp);
     const today = new Date();
@@ -81,20 +99,26 @@ function formatDateHeader(timestamp) {
 function renderApp() {
     renderMatchHistoryBar();
     renderPlayerTabsBar();
+    renderOverview();
     syncWebviewVisibility();
 }
 
 function handleLobbyPayload(payload) {
     if (!payload || !payload.players || payload.players.length === 0) {
-        document.getElementById('status-text').innerText = "No active match found.";
-        document.getElementById('status-indicator').className = "offline";
+        setStatus(false, "No active match found.");
         return;
     }
 
     const { matchId, mapName, players, timestamp } = payload;
-    const key = matchId || 'current';
 
+    if (!matchId || matchId === 'menu') {
+        setStatus(false, matchId === 'menu' ? "In menus — no active match." : "No active match found.");
+        return;
+    }
+
+    const key = matchId;
     const isNewMatch = !matchCache.has(key);
+
     if (!isNewMatch) {
         const existing = matchCache.get(key);
         existing.players = players;
@@ -108,7 +132,10 @@ function handleLobbyPayload(payload) {
         });
     }
 
-    if (isNewMatch) userSelectedMatch = false;
+    if (isNewMatch) {
+        userSelectedMatch = false;
+        showOverview = true;
+    }
     if (!userSelectedMatch) activeMatchId = key;
 
     const active = matchCache.get(activeMatchId);
@@ -116,8 +143,7 @@ function handleLobbyPayload(payload) {
         activePlayerId = active.players[0]?.puuid || null;
     }
 
-    document.getElementById('status-indicator').className = "online";
-    document.getElementById('status-text').innerText = `Active (${players.length} Players Found)`;
+    setStatus(true, `Active — ${players.length} players`);
 
     renderApp();
 }
@@ -128,7 +154,6 @@ function renderMatchHistoryBar() {
 
     const sortedMatches = Array.from(matchCache.values()).sort((a, b) => b.timestamp - a.timestamp);
 
-    // Group by Day String
     const grouped = new Map();
     sortedMatches.forEach(match => {
         const dayLabel = formatDateHeader(match.timestamp);
@@ -147,15 +172,23 @@ function renderMatchHistoryBar() {
 
         matches.forEach(match => {
             const btn = document.createElement('button');
+            btn.type = 'button';
             btn.className = `match-tab-btn ${match.matchId === activeMatchId ? 'active' : ''}`;
 
-            const timeStr = new Date(match.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            btn.innerHTML = `
-                <span class="match-map">${match.mapName}</span>
-                <span class="match-time">${timeStr}</span>
-            `;
+            const mapEl = document.createElement('span');
+            mapEl.className = 'match-map';
+            mapEl.innerText = match.mapName;
+
+            const timeEl = document.createElement('span');
+            timeEl.className = 'match-time';
+            timeEl.innerText = new Date(match.timestamp)
+                .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            btn.append(mapEl, timeEl);
+
             btn.onclick = () => {
                 userSelectedMatch = true;
+                showOverview = true;
                 activeMatchId = match.matchId;
                 activePlayerId = match.players[0]?.puuid || null;
                 renderApp();
@@ -184,6 +217,7 @@ function renderPlayerTabsBar() {
         }
 
         const btn = document.createElement('button');
+        btn.type = 'button';
         btn.className = `player-tab-btn ${player.puuid === activePlayerId ? 'active' : ''}`;
 
         const dot = document.createElement('span');
@@ -192,48 +226,116 @@ function renderPlayerTabsBar() {
 
         const nameSpan = document.createElement('span');
         nameSpan.className = 'player-name';
-        nameSpan.innerText = player.name;
+        nameSpan.innerText = displayNameFor(player);
         btn.appendChild(nameSpan);
 
-        btn.onclick = () => {
-            activePlayerId = player.puuid;
-            renderApp();
-        };
+        btn.onclick = () => openPlayer(player.puuid);
 
         tabsBar.appendChild(btn);
     });
 }
 
+function renderOverview() {
+    const overview = document.getElementById('match-overview');
+    const match = matchCache.get(activeMatchId);
+
+    if (!match || !showOverview) {
+        overview.hidden = true;
+        return;
+    }
+
+    overview.hidden = false;
+    document.getElementById('overview-map').innerText = match.mapName || 'Match';
+    document.getElementById('overview-meta').innerText =
+        `${match.players.length} players · ${new Date(match.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+
+    const ally = document.getElementById('roster-ally');
+    const enemy = document.getElementById('roster-enemy');
+    ally.innerHTML = '';
+    enemy.innerHTML = '';
+
+    match.players.forEach(player => {
+        (player.isMyTeam ? ally : enemy).appendChild(buildPlayerCard(player));
+    });
+}
+
+function buildPlayerCard(player) {
+    const isSelf = isSelfPlayer(player);
+
+    const li = document.createElement('li');
+    li.className = `player-card${isSelf ? ' is-self' : ''}`;
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'player-card-btn';
+
+    const nameEl = document.createElement('span');
+    nameEl.className = 'player-card-name';
+    nameEl.innerText = displayNameFor(player);
+
+    const tagEl = document.createElement('span');
+    tagEl.className = 'player-card-tag';
+    tagEl.innerText = `#${player.tag}`;
+
+    btn.append(nameEl, tagEl);
+
+    if (isSelf) {
+        const badge = document.createElement('span');
+        badge.className = 'player-card-badge';
+        badge.innerText = 'YOU';
+        btn.appendChild(badge);
+    }
+
+    btn.onclick = () => openPlayer(player.puuid);
+    li.appendChild(btn);
+    return li;
+}
+
+function openPlayer(puuid) {
+    activePlayerId = puuid;
+    showOverview = false;
+    renderApp();
+}
+
 function syncWebviewVisibility() {
     const container = document.getElementById('views-container');
     const currentMatch = matchCache.get(activeMatchId);
-    if(!currentMatch || !activePlayerId) {
+
+    if (showOverview && currentMatch) {
+        container.querySelectorAll('webview').forEach(v => v.classList.remove('active'));
+        clearEmptyState();
+        return;
+    }
+    if (!currentMatch || !activePlayerId) {
         showEmptyState(matchCache.size === 0 ? "No matches saved." : "No active match.");
         return;
     }
+
     const player = currentMatch.players.find(p => p.puuid === activePlayerId);
-    if(!player) {
-        showEmptyState("Player not found in this match.")
+    if (!player) {
+        showEmptyState("Player not found in this match.");
         return;
     }
     clearEmptyState();
 
     const viewId = viewIdFor(activeMatchId, activePlayerId);
     let webview = document.getElementById(viewId);
-    if(!webview) {
+    if (!webview) {
         webview = document.createElement('webview');
         webview.id = viewId;
         webview.src = player.url;
         webview.dataset.matchId = activeMatchId;
-        webview.dataset.puuid = player.puuid
+        webview.dataset.puuid = player.puuid;
         webview.setAttribute('partition', 'persist:tracker');
         container.appendChild(webview);
     }
+
     touchView(viewId);
     evictStaleViews();
+
     container.querySelectorAll('webview').forEach(v => {
         v.classList.toggle('active', v.id === viewId);
-    })
+    });
 }
 
 async function deleteActiveMatch() {
@@ -244,7 +346,9 @@ async function deleteActiveMatch() {
     userSelectedMatch = false;
 
     const viewsContainer = document.getElementById('views-container');
-    Array.from(viewsContainer.querySelectorAll('webview')).filter(v => v.dataset.matchId === toDelete).forEach(v => destroyView(v.id));
+    Array.from(viewsContainer.querySelectorAll('webview'))
+        .filter(v => v.dataset.matchId === toDelete)
+        .forEach(v => destroyView(v.id));
 
     await window.api.deleteMatch(toDelete);
 
@@ -252,6 +356,7 @@ async function deleteActiveMatch() {
     if (sortedRemaining.length > 0) {
         activeMatchId = sortedRemaining[0].matchId;
         activePlayerId = sortedRemaining[0].players[0]?.puuid || null;
+        showOverview = true;
     } else {
         activeMatchId = null;
         activePlayerId = null;
@@ -262,31 +367,42 @@ async function deleteActiveMatch() {
 
 function goBackInActiveTab() {
     if (!activeMatchId || !activePlayerId) return;
-    const activeWebview = document.getElementById(`webview-${activeMatchId}-${activePlayerId}`);
+    const activeWebview = document.getElementById(viewIdFor(activeMatchId, activePlayerId));
     if (activeWebview && typeof activeWebview.goBack === 'function' && activeWebview.canGoBack()) {
         activeWebview.goBack();
     }
 }
 
 async function manualRefresh() {
-    document.getElementById('status-text').innerText = "Syncing lobby...";
+    setStatusText("Syncing lobby…");
     try {
         const res = await window.api.fetchPlayers();
         if (res && res.success) {
             handleLobbyPayload(res.data);
         } else {
-            document.getElementById('status-text').innerText = "Sync failed.";
+            setStatus(false, res?.error ? `Sync failed: ${res.error}` : "Sync failed.");
         }
     } catch (e) {
-        document.getElementById('status-text').innerText = "Error syncing lobby.";
+        console.error('Lobby sync failed:', e);
+        setStatus(false, "Error syncing lobby.");
     }
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
+    document.getElementById('overview-btn').addEventListener('click', () => {
+        showOverview = true;
+        renderApp();
+    });
+    document.getElementById('back-btn').addEventListener('click', goBackInActiveTab);
+    document.getElementById('refresh-btn').addEventListener('click', manualRefresh);
+    document.getElementById('delete-btn').addEventListener('click', deleteActiveMatch);
+
     const saved = await window.api.loadSavedMatches();
     if (saved && Array.isArray(saved)) {
         saved.forEach(m => matchCache.set(m.matchId, m));
     }
+    renderApp();
+
     await manualRefresh();
 
     window.api.onLobbyUpdated((payload) => {
