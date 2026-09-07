@@ -1,0 +1,25 @@
+{
+  "name": "valorant-scout",
+  "version": "1.0.0",
+  "description": "Desktop Electron app that loads other player's tracker.gg inside tabs.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RedNinja17/valorant-scout.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/RedNinja17/valorant-scout/issues"
+  },
+  "homepage": "https://github.com/RedNinja17/valorant-scout#readme",
+  "dependencies": {
+    "axios": "^1.20.0",
+    "electron": "^44.2.0"
+  }
+}
