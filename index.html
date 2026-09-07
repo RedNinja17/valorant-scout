@@ -3,29 +3,49 @@
 
 <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Valorant Scout</title>
     <link rel="stylesheet" href="style.css" />
 </head>
 
 <body>
-
-    <!-- Top Action Bar -->
     <header id="top-bar">
-        <div class="left-controls">
-            <button id="back-btn" onclick="goBackInActiveTab()">← Back</button>
-            <button id="refresh-btn" onclick="manualRefresh()">🔄 Sync Lobby</button>
+        <div class="brand">
+            <span class="app-title">VALORANT SCOUT</span>
         </div>
-        <div id="status-text">Connecting to Valorant...</div>
+
+        <div id="status-container">
+            <span id="status-indicator"></span>
+            <span id="status-text">Connecting to Riot Client...</span>
+        </div>
+
+        <div class="left-controls">
+            <button id="back-btn" onclick="goBackInActiveTab()" title="Go Back">← Back</button>
+            <button id="refresh-btn" onclick="manualRefresh()" title="Sync Lobby Data">🔄 Sync</button>
+            <button id="delete-btn" onclick="deleteActiveMatch()" title="Delete Current Selected Match">🗑️ Delete
+                Match</button>
+        </div>
     </header>
 
-    <!-- Dynamic Player Tabs -->
-    <nav id="tabs-bar">
-        <!-- Buttons generated via JS -->
+    <!-- Match History Row (Grouped by Date) -->
+    <section id="match-history-bar">
+        <div class="bar-label">MATCHES:</div>
+        <div id="match-tabs-list">
+            <!-- Grouped match items populated via renderer.js -->
+        </div>
+    </section>
+
+    <!-- Player Sub-Tabs -->
+    <nav id="player-tabs-bar">
+        <!-- Dynamically populated player buttons -->
     </nav>
 
-    <!-- Webview / Iframe Containers -->
+    <!-- Webview Container -->
     <main id="views-container">
-        <div class="empty-state">Loading lobby data...</div>
+        <div class="empty-state">
+            <div class="spinner"></div>
+            <p>Scanning local game client for active matches...</p>
+        </div>
     </main>
 
     <script src="renderer.js"></script>
