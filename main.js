@@ -8,7 +8,9 @@ let main = null;
 let autoTimeout = null;
 let isPolling = false;
 let mapNameCache = {};
+let tierNameCache = {};
 let matchesDir = null;
+const mmrCache = new Map();
 const localHttpsAgent = new https.Agent({ rejectUnauthorized: false });
 
 async function fetchMapNames() {
@@ -29,10 +31,31 @@ async function fetchMapNames() {
     }
 }
 
+async function fetchCompetitiveTiers() {
+    try {
+        const res = await axios.get('https://valorant-api.com/v1/competitivetiers');
+        const episodes = res.data?.data || [];
+        const latest = episodes[episodes.length - 1];
+        const cache = {};
+        (latest?.tiers || []).forEach(t => {
+            cache[t.tier] = t.tierName;
+        });
+        tierNameCache = cache;
+    } catch (e) {
+        console.warn('Failed to fetch competitive tiers:', e.message);
+    }
+}
+
 function resolveMapName(rawMapName) {
     if (!rawMapName) return 'Unknown Map';
     const codeName = rawMapName.split('/').pop().toLowerCase();
     return mapNameCache[codeName] || (codeName.charAt(0).toUpperCase() + codeName.slice(1));
+}
+
+function tierNameFor(tier) {
+    const raw = tierNameCache[tier];
+    if (!raw) return 'Unranked';
+    return raw.trim().toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 }
 
 async function getMatchesDir() {
@@ -162,6 +185,42 @@ async function getAuthTokens() {
     };
 }
 
+async function fetchRank(puuid, pdUrl, remoteHeaders) {
+    if (mmrCache.has(puuid)) return mmrCache.get(puuid);
+
+    try {
+        const res = await axios.get(`${pdUrl}/mmr/v1/players/${puuid}`, { headers: remoteHeaders });
+        const latest = res.data?.LatestCompetitiveUpdate;
+        const tier = latest?.TierAfterUpdate ?? 0;
+
+        const rank = {
+            tier: tier,
+            tierName: tierNameFor(tier),
+            rr: tier > 0 ? (latest?.RankedRatingAfterUpdate ?? null) : null
+        };
+
+        mmrCache.set(puuid, rank);
+        return rank;
+    } catch (e) {
+        console.warn(`Failed to fetch MMR for ${puuid}:`, e.message);
+        return null;
+    }
+}
+
+function enrichWithRanks(payload, pdUrl, remoteHeaders) {
+    Promise.all(payload.players.map(p => fetchRank(p.puuid, pdUrl, remoteHeaders)))
+        .then(async (ranks) => {
+            payload.players.forEach((p, i) => {
+                p.rank = ranks[i];
+            });
+            await saveMatches(payload);
+            if (main && !main.isDestroyed()) {
+                main.webContents.send('lobby-updated', payload);
+            }
+        })
+        .catch(err => console.warn('Rank enrichment failed:', err.message));
+}
+
 async function getPlayers() {
     try {
         const { accessToken, entitlementsToken, puuid, region, clientVersion } = await getAuthTokens();
@@ -204,11 +263,16 @@ async function getPlayers() {
                     mapName: 'Main Menu',
                     timestamp: Date.now(),
                     players: [{
-                        name: selfInfo.GameName ? `${selfInfo.GameName} (You)` : 'You',
+                        name: selfInfo.GameName || 'You',
                         tag: selfInfo.TagLine || '',
                         team: 'Blue',
                         isMyTeam: true,
+                        isSelf: true,
                         puuid: puuid,
+                        agentId: null,
+                        accountLevel: null,
+                        incognito: false,
+                        rank: mmrCache.get(puuid) || null,
                         url: selfInfo.GameName ? `https://tracker.gg/valorant/profile/riot/${encodeURIComponent(selfInfo.GameName)}%23${encodeURIComponent(selfInfo.TagLine)}/overview` : '#'
                     }]
                 };
@@ -238,6 +302,15 @@ async function getPlayers() {
             });
         }
 
+        const identityMap = {};
+        playersData.forEach(p => {
+            identityMap[p.Subject] = {
+                agentId: p.CharacterID || null,
+                accountLevel: p.PlayerIdentity?.AccountLevel ?? null,
+                incognito: p.PlayerIdentity?.Incognito ?? false
+            };
+        });
+
         const puuids = playersData.map(p => p.Subject);
         if (puuids.length === 0) return { matchId: null, mapName: 'Unknown', timestamp: Date.now(), players: [] };
 
@@ -249,13 +322,19 @@ async function getPlayers() {
             const tag = p.TagLine;
             const isSelf = p.Subject === puuid;
             const actualTeam = rawTeamMap[p.Subject] || 'Unknown';
+            const identity = identityMap[p.Subject] || {};
 
             return {
-                name: isSelf ? `${name} (You)` : name,
+                name: name,
                 tag: tag,
                 team: actualTeam,
                 isMyTeam: actualTeam === myRawTeam,
+                isSelf: isSelf,
                 puuid: p.Subject,
+                agentId: identity.agentId || null,
+                accountLevel: identity.accountLevel ?? null,
+                incognito: identity.incognito ?? false,
+                rank: mmrCache.get(p.Subject) || null,
                 url: `https://tracker.gg/valorant/profile/riot/${encodeURIComponent(name)}%23${encodeURIComponent(tag)}/overview`
             };
         });
@@ -272,6 +351,8 @@ async function getPlayers() {
         };
 
         await saveMatches(payload);
+        enrichWithRanks(payload, pdUrl, remoteHeaders);
+
         return payload;
 
     } catch (err) {
@@ -354,7 +435,7 @@ function stopPolling() {
 
 async function createWindow() {
     setupAdBlocker();
-    await fetchMapNames();
+    await Promise.all([fetchMapNames(), fetchCompetitiveTiers()]);
 
     main = new BrowserWindow({
         width: 1440,
