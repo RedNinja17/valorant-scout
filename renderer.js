@@ -2,6 +2,7 @@ let activeMatchId = null;
 let activePlayerId = null;
 let userSelectedMatch = false;
 let showOverview = true;
+let overviewTab = 'roster';
 const matchCache = new Map();
 
 const MAX_LIVE_VIEWS = 5;
@@ -72,6 +73,7 @@ function displayNameFor(player) {
 }
 
 function isSelfPlayer(player) {
+    if (typeof player.isSelf === 'boolean') return player.isSelf;
     return player.name.endsWith(' (You)');
 }
 
@@ -128,6 +130,7 @@ function handleLobbyPayload(payload) {
         userSelectedMatch = false;
         activeMatchId = key;
         showOverview = true;
+        overviewTab = 'roster';
         activePlayerId = null;
     }
 
@@ -183,6 +186,7 @@ function renderMatchHistoryBar() {
             btn.onclick = () => {
                 userSelectedMatch = true;
                 showOverview = true;
+                overviewTab = 'roster';
                 activeMatchId = match.matchId;
                 activePlayerId = null;
                 renderApp();
@@ -230,33 +234,130 @@ function renderPlayerTabsBar() {
 
 function renderOverview() {
     const overview = document.getElementById('match-overview');
+    const matchPage = document.getElementById('match-page');
     const overviewBtn = document.getElementById('overview-btn');
     const match = matchCache.get(activeMatchId);
 
     if (!match || !showOverview) {
         overview.classList.remove('active');
+        matchPage.classList.remove('active');
         if (overviewBtn) overviewBtn.classList.remove('active');
         return;
     }
 
-    overview.classList.add('active');
     if (overviewBtn) overviewBtn.classList.add('active');
+    overview.classList.toggle('active', overviewTab === 'roster');
+    matchPage.classList.toggle('active', overviewTab === 'match');
 
+    document.getElementById('overview-map').innerText = match.mapName || 'Match';
+    document.getElementById('overview-meta').innerText =
+        `${match.players.length} players · ${new Date(match.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+
+    const ally = document.getElementById('roster-ally');
+    const enemy = document.getElementById('roster-enemy');
+    ally.innerHTML = '';
+    enemy.innerHTML = '';
+
+    match.players.forEach(player => {
+        (player.isMyTeam ? ally : enemy).appendChild(buildPlayerCard(player));
+    });
+
+    if (overviewTab === 'match') syncMatchPage(match);
+}
+
+function syncMatchPage(match) {
     const matchWebview = document.getElementById('match-webview');
-    if (matchWebview && match.matchId && match.matchId !== 'menu') {
-        const matchUrl = `https://tracker.gg/valorant/match/${match.matchId}`;
+    if (!matchWebview || !match.matchId || match.matchId === 'menu') return;
 
-        if (!matchWebview.dataset.listenersAttached) {
-            matchWebview.dataset.listenersAttached = "true";
-            matchWebview.addEventListener('did-fail-load', (e) => {
-                console.error('Match webview failed to load:', e);
-            });
-        }
+    const matchUrl = `https://tracker.gg/valorant/match/${match.matchId}`;
 
-        if (matchWebview.src !== matchUrl) {
-            matchWebview.src = matchUrl;
-        }
+    if (!matchWebview.dataset.listenersAttached) {
+        matchWebview.dataset.listenersAttached = "true";
+        matchWebview.addEventListener('did-fail-load', (e) => {
+            console.error('Match webview failed to load:', e);
+        });
     }
+
+    if (matchWebview.src !== matchUrl) matchWebview.src = matchUrl;
+}
+
+function skeleton(width) {
+    const el = document.createElement('span');
+    el.className = 'skeleton';
+    el.style.width = width;
+    return el;
+}
+
+function buildPlayerCard(player) {
+    const isSelf = isSelfPlayer(player);
+
+    const li = document.createElement('li');
+    li.className = `player-card${isSelf ? ' is-self' : ''}`;
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'player-card-btn';
+
+    const portrait = document.createElement('span');
+    portrait.className = 'player-card-portrait';
+    if (player.agentId) {
+        const img = document.createElement('img');
+        img.src = `https://media.valorant-api.com/agents/${player.agentId}/displayicon.png`;
+        img.alt = '';
+        portrait.appendChild(img);
+    }
+    btn.appendChild(portrait);
+
+    const main = document.createElement('span');
+    main.className = 'player-card-main';
+
+    const nameRow = document.createElement('span');
+    nameRow.className = 'player-card-namerow';
+
+    const nameEl = document.createElement('span');
+    nameEl.className = 'player-card-name';
+    nameEl.innerText = displayNameFor(player);
+
+    const tagEl = document.createElement('span');
+    tagEl.className = 'player-card-tag';
+    tagEl.innerText = `#${player.tag}`;
+
+    nameRow.append(nameEl, tagEl);
+
+    const metaRow = document.createElement('span');
+    metaRow.className = 'player-card-meta';
+
+    if (player.rank) {
+        const rankEl = document.createElement('span');
+        rankEl.className = 'player-card-rank';
+        rankEl.innerText = player.rank.rr === null
+            ? player.rank.tierName
+            : `${player.rank.tierName} · ${player.rank.rr} RR`;
+        metaRow.appendChild(rankEl);
+    } else {
+        metaRow.appendChild(skeleton('92px'));
+    }
+
+    if (typeof player.accountLevel === 'number') {
+        const lvlEl = document.createElement('span');
+        lvlEl.className = 'player-card-level';
+        lvlEl.innerText = `Lv ${player.accountLevel}`;
+        metaRow.appendChild(lvlEl);
+    }
+
+    main.append(nameRow, metaRow);
+    btn.appendChild(main);
+
+    if (isSelf) {
+        const badge = document.createElement('span');
+        badge.className = 'player-card-badge';
+        badge.innerText = 'YOU';
+        btn.appendChild(badge);
+    }
+
+    btn.onclick = () => openPlayer(player.puuid);
+    li.appendChild(btn);
+    return li;
 }
 
 function openPlayer(puuid) {
@@ -334,6 +435,7 @@ async function deleteActiveMatch() {
         activeMatchId = sortedRemaining[0].matchId;
         activePlayerId = sortedRemaining[0].players[0]?.puuid || null;
         showOverview = true;
+        overviewTab = 'roster';
     } else {
         activeMatchId = null;
         activePlayerId = null;
@@ -345,14 +447,18 @@ async function deleteActiveMatch() {
 function goBackInActiveTab() {
     let activeWebview = null;
 
-    if (showOverview) {
+    if (showOverview && overviewTab === 'match') {
         activeWebview = document.getElementById('match-webview');
-    } else if (activeMatchId && activePlayerId) {
+    } else if (!showOverview && activeMatchId && activePlayerId) {
         activeWebview = document.getElementById(viewIdFor(activeMatchId, activePlayerId));
     }
 
-    if (activeWebview && typeof activeWebview.goBack === 'function' && activeWebview.canGoBack()) {
-        activeWebview.goBack();
+    if (!activeWebview) return;
+
+    try {
+        if (activeWebview.canGoBack()) activeWebview.goBack();
+    } catch (e) {
+        console.warn('Webview not ready for goBack:', e.message);
     }
 }
 
@@ -374,6 +480,11 @@ async function manualRefresh() {
 window.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('overview-btn').addEventListener('click', () => {
         showOverview = true;
+        overviewTab = 'roster';
+        renderApp();
+    });
+    document.getElementById('match-page-btn').addEventListener('click', () => {
+        overviewTab = overviewTab === 'roster' ? 'match' : 'roster';
         renderApp();
     });
     document.getElementById('back-btn').addEventListener('click', goBackInActiveTab);
