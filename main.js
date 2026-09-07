@@ -441,7 +441,7 @@ async function createWindow() {
         width: 1440,
         height: 1280,
         title: "Valorant Scout",
-        frame: true,
+        frame: false, // Disables default native window border/title bar
         backgroundColor: '#0f1923',
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
@@ -486,6 +486,12 @@ app.on('will-quit', () => globalShortcut.unregisterAll());
 app.on('window-all-closed', () => {
     stopPolling();
     if (process.platform !== 'darwin') app.quit();
+});
+
+ipcMain.on('close-app', () => {
+    if (main && !main.isDestroyed()) {
+        main.close();
+    }
 });
 
 ipcMain.handle('fetch-players', async () => {

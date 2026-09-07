@@ -8,6 +8,12 @@ const matchCache = new Map();
 const MAX_LIVE_VIEWS = 5;
 const view_order = [];
 
+document.getElementById('close-app-btn')?.addEventListener('click', () => {
+    if (window.api?.closeApp) {
+        window.api.closeApp();
+    }
+});
+
 function viewIdFor(matchId, puuid) {
     return `webview-${matchId}-${puuid}`;
 }
@@ -101,14 +107,14 @@ function renderApp() {
 
 function handleLobbyPayload(payload) {
     if (!payload || !payload.players || payload.players.length === 0) {
-        setStatus(false, "No active match found.");
+        setStatus(false, "No match found.");
         return;
     }
 
     const { matchId, mapName, players, timestamp } = payload;
 
     if (!matchId || matchId === 'menu') {
-        setStatus(false, matchId === 'menu' ? "In menus — no active match." : "No active match found.");
+        setStatus(false, matchId === 'menu' ? "In Menu." : "No match found.");
         return;
     }
 
@@ -207,29 +213,41 @@ function renderPlayerTabsBar() {
 
     const players = currentMatch.players;
 
-    players.forEach((player, index) => {
-        if (index > 0 && players[index - 1].isMyTeam !== player.isMyTeam) {
-            const divider = document.createElement('div');
-            divider.className = 'team-divider';
-            tabsBar.appendChild(divider);
-        }
+    const allyPlayers = players.filter(p => p.isMyTeam);
+    const enemyPlayers = players.filter(p => !p.isMyTeam);
 
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = `player-tab-btn ${(!showOverview && player.puuid === activePlayerId) ? 'active' : ''}`;
+    function createTeamGroup(teamPlayers, isAlly) {
+        if (teamPlayers.length === 0) return;
 
-        const dot = document.createElement('span');
-        dot.className = `team-dot ${player.isMyTeam ? 'team-blue' : 'team-red'}`;
-        btn.appendChild(dot);
+        const teamGroup = document.createElement('div');
+        teamGroup.className = `team-glass-pill ${isAlly ? 'ally-group' : 'enemy-group'}`;
 
-        const nameSpan = document.createElement('span');
-        nameSpan.className = 'player-name';
-        nameSpan.innerText = displayNameFor(player);
-        btn.appendChild(nameSpan);
+        teamPlayers.forEach(player => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = `player-tab-btn ${(!showOverview && player.puuid === activePlayerId) ? 'active' : ''}`;
 
-        btn.onclick = () => openPlayer(player.puuid);
-        tabsBar.appendChild(btn);
-    });
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'player-name';
+            nameSpan.innerText = displayNameFor(player);
+            btn.appendChild(nameSpan);
+
+            btn.onclick = () => openPlayer(player.puuid);
+            teamGroup.appendChild(btn);
+        });
+
+        tabsBar.appendChild(teamGroup);
+    }
+
+    createTeamGroup(allyPlayers, true);
+
+    if (allyPlayers.length > 0 && enemyPlayers.length > 0) {
+        const divider = document.createElement('div');
+        divider.className = 'team-divider';
+        tabsBar.appendChild(divider);
+    }
+
+    createTeamGroup(enemyPlayers, false);
 }
 
 function renderOverview() {
@@ -463,17 +481,24 @@ function goBackInActiveTab() {
 }
 
 async function manualRefresh() {
-    setStatusText("Syncing lobby…");
+    setStatusText("SYNCING LOBBY…");
+
+    if (!window.api) {
+        setStatus(false, "API UNAVAILABLE");
+        console.error("window.api is not defined. Check your Electron preload script.");
+        return;
+    }
+
     try {
         const res = await window.api.fetchPlayers();
         if (res && res.success) {
             handleLobbyPayload(res.data);
         } else {
-            setStatus(false, res?.error ? `Sync failed: ${res.error}` : "Sync failed.");
+            setStatus(false, res?.error ? `SYNC FAILED: ${res.error.toUpperCase()}` : "SYNC FAILED");
         }
     } catch (e) {
         console.error('Lobby sync failed:', e);
-        setStatus(false, "Error syncing lobby.");
+        setStatus(false, "ERROR SYNCING LOBBY");
     }
 }
 
