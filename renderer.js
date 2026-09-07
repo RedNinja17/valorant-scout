@@ -130,13 +130,16 @@ function handleLobbyPayload(payload) {
             timestamp: timestamp || Date.now(),
             players: players
         });
+
+        userSelectedMatch = false;
+        activeMatchId = key;
+        showOverview = true;
+        activePlayerId = null;
     }
 
-    if (isNewMatch) {
-        userSelectedMatch = false;
-        showOverview = true;
+    if (!userSelectedMatch) {
+        activeMatchId = key;
     }
-    if (!userSelectedMatch) activeMatchId = key;
 
     const active = matchCache.get(activeMatchId);
     if (active && (!activePlayerId || !active.players.some(p => p.puuid === activePlayerId))) {
@@ -190,7 +193,7 @@ function renderMatchHistoryBar() {
                 userSelectedMatch = true;
                 showOverview = true;
                 activeMatchId = match.matchId;
-                activePlayerId = match.players[0]?.puuid || null;
+                activePlayerId = null;
                 renderApp();
             };
             groupEl.appendChild(btn);
@@ -218,7 +221,7 @@ function renderPlayerTabsBar() {
 
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = `player-tab-btn ${player.puuid === activePlayerId ? 'active' : ''}`;
+        btn.className = `player-tab-btn ${(!showOverview && player.puuid === activePlayerId) ? 'active' : ''}`;
 
         const dot = document.createElement('span');
         dot.className = `team-dot ${player.isMyTeam ? 'team-blue' : 'team-red'}`;
@@ -245,18 +248,14 @@ function renderOverview() {
     }
 
     overview.hidden = false;
-    document.getElementById('overview-map').innerText = match.mapName || 'Match';
-    document.getElementById('overview-meta').innerText =
-        `${match.players.length} players · ${new Date(match.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 
-    const ally = document.getElementById('roster-ally');
-    const enemy = document.getElementById('roster-enemy');
-    ally.innerHTML = '';
-    enemy.innerHTML = '';
-
-    match.players.forEach(player => {
-        (player.isMyTeam ? ally : enemy).appendChild(buildPlayerCard(player));
-    });
+    const matchWebview = document.getElementById('match-webview');
+    if (matchWebview && match.matchId && match.matchId !== 'menu') {
+        const matchUrl = `https://tracker.gg/valorant/match/${match.matchId}`;
+        if (matchWebview.src !== matchUrl) {
+            matchWebview.src = matchUrl;
+        }
+    }
 }
 
 function buildPlayerCard(player) {
