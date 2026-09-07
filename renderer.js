@@ -1,6 +1,67 @@
 let activeMatchId = null;
 let activePlayerId = null;
-const matchCache = new Map(); // Key: matchId, Value: matchObj
+let userSelectedMatch = false;
+const matchCache = new Map(); // matchid, matchobj
+
+const MAX_LIVE_VIEWS = 5;
+const view_order = [];
+
+function viewIdFor(matchId, puuid) {
+    return `webview-${matchId}-${puuid}`;
+}
+
+function touchView(viewId) {
+    const i = view_order.indexOf(viewId);
+    if (i !== -1) {
+        view_order.splice(i, 1);
+    }
+    view_order.push(viewId);
+}
+
+function destroyView(viewId) {
+    const el = document.getElementById(viewId);
+    if (el) el.remove();
+    const i = view_order.indexOf(viewId);
+    if (i !== -1) {
+        view_order.splice(i, 1);
+    }
+}
+
+function evictStaleViews() {
+    const container = document.getElementById('views-container');
+    container.querySelectorAll('webview').forEach(v => {
+        if(v.dataset.matchId !== activeMatchId) {
+            destroyView(v.id);
+        }
+    });
+    const keep = viewIdFor(activeMatchId, activePlayerId);
+    while(view_order.length > MAX_LIVE_VIEWS) {
+        const oldest = view_order.find(id => id !== keep);
+        if(!oldest) break;
+        destroyView(oldest);
+    }
+}
+
+function showEmptyState(message) {
+    const container = document.getElementById('views-container');
+    container.querySelectorAll('webview').forEach(v => destroyView(v.id));
+
+    let el = container.querySelector('.empty-state');
+    if (!el) {
+        el = document.createElement('div');
+        el.className = 'empty-state';
+        container.appendChild(el);
+    }
+    el.innerHTML = '';
+    const p = document.createElement('p');
+    p.innerText = message;
+    el.appendChild(p);
+}
+
+function clearEmptyState() {
+    const el = document.getElementById('views-container').querySelector('.empty-state');
+    if (el) el.remove();
+}
 
 function formatDateHeader(timestamp) {
     const date = new Date(timestamp);
@@ -33,13 +94,12 @@ function handleLobbyPayload(payload) {
     const { matchId, mapName, players, timestamp } = payload;
     const key = matchId || 'current';
 
-    if (matchCache.has(key)) {
-        // Match already exists: update players/mapName, BUT PRESERVE original timestamp
+    const isNewMatch = !matchCache.has(key);
+    if (!isNewMatch) {
         const existing = matchCache.get(key);
         existing.players = players;
         existing.mapName = mapName || existing.mapName;
     } else {
-        // New match: set it with the provided timestamp
         matchCache.set(key, {
             matchId: key,
             mapName: mapName || 'Match',
@@ -48,10 +108,12 @@ function handleLobbyPayload(payload) {
         });
     }
 
-    // Automatically highlight incoming live match
-    activeMatchId = key;
-    if (!activePlayerId || !players.some(p => p.puuid === activePlayerId)) {
-        activePlayerId = players[0]?.puuid || null;
+    if (isNewMatch) userSelectedMatch = false;
+    if (!userSelectedMatch) activeMatchId = key;
+
+    const active = matchCache.get(activeMatchId);
+    if (active && (!activePlayerId || !active.players.some(p => p.puuid === activePlayerId))) {
+        activePlayerId = active.players[0]?.puuid || null;
     }
 
     document.getElementById('status-indicator').className = "online";
@@ -64,7 +126,6 @@ function renderMatchHistoryBar() {
     const container = document.getElementById('match-tabs-list');
     container.innerHTML = '';
 
-    // Sort matches: newest timestamp first
     const sortedMatches = Array.from(matchCache.values()).sort((a, b) => b.timestamp - a.timestamp);
 
     // Group by Day String
@@ -94,6 +155,7 @@ function renderMatchHistoryBar() {
                 <span class="match-time">${timeStr}</span>
             `;
             btn.onclick = () => {
+                userSelectedMatch = true;
                 activeMatchId = match.matchId;
                 activePlayerId = match.players[0]?.puuid || null;
                 renderApp();
@@ -143,32 +205,35 @@ function renderPlayerTabsBar() {
 }
 
 function syncWebviewVisibility() {
-    const viewsContainer = document.getElementById('views-container');
-    const emptyState = viewsContainer.querySelector('.empty-state');
-    if (emptyState) emptyState.remove();
-
+    const container = document.getElementById('views-container');
     const currentMatch = matchCache.get(activeMatchId);
-    if (!currentMatch) return;
+    if(!currentMatch || !activePlayerId) {
+        showEmptyState(matchCache.size === 0 ? "No matches saved." : "No active match.");
+        return;
+    }
+    const player = currentMatch.players.find(p => p.puuid === activePlayerId);
+    if(!player) {
+        showEmptyState("Player not found in this match.")
+        return;
+    }
+    clearEmptyState();
 
-    currentMatch.players.forEach((player) => {
-        const viewId = `webview-${activeMatchId}-${player.puuid}`;
-        let webview = document.getElementById(viewId);
-
-        if (!webview) {
-            webview = document.createElement('webview');
-            webview.id = viewId;
-            webview.src = player.url;
-            webview.dataset.matchId = activeMatchId;
-            webview.dataset.puuid = player.puuid;
-            viewsContainer.appendChild(webview);
-        }
-    });
-
-    const allViews = viewsContainer.querySelectorAll('webview');
-    allViews.forEach(v => {
-        const isSelectedView = (v.dataset.matchId === activeMatchId && v.dataset.puuid === activePlayerId);
-        v.classList.toggle('active', isSelectedView);
-    });
+    const viewId = viewIdFor(activeMatchId, activePlayerId);
+    let webview = document.getElementById(viewId);
+    if(!webview) {
+        webview = document.createElement('webview');
+        webview.id = viewId;
+        webview.src = player.url;
+        webview.dataset.matchId = activeMatchId;
+        webview.dataset.puuid = player.puuid
+        webview.setAttribute('partition', 'persist:tracker');
+        container.appendChild(webview);
+    }
+    touchView(viewId);
+    evictStaleViews();
+    container.querySelectorAll('webview').forEach(v => {
+        v.classList.toggle('active', v.id === viewId);
+    })
 }
 
 async function deleteActiveMatch() {
@@ -176,16 +241,13 @@ async function deleteActiveMatch() {
 
     const toDelete = activeMatchId;
     matchCache.delete(toDelete);
+    userSelectedMatch = false;
 
-    // Remove matching Webviews from DOM
     const viewsContainer = document.getElementById('views-container');
-    const viewsToRemove = viewsContainer.querySelectorAll(`webview[data-match-id="${toDelete}"]`);
-    viewsToRemove.forEach(v => v.remove());
+    Array.from(viewsContainer.querySelectorAll('webview')).filter(v => v.dataset.matchId === toDelete).forEach(v => destroyView(v.id));
 
-    // Delete file from disk
     await window.api.deleteMatch(toDelete);
 
-    // Re-assign active match to newest available
     const sortedRemaining = Array.from(matchCache.values()).sort((a, b) => b.timestamp - a.timestamp);
     if (sortedRemaining.length > 0) {
         activeMatchId = sortedRemaining[0].matchId;
@@ -193,7 +255,6 @@ async function deleteActiveMatch() {
     } else {
         activeMatchId = null;
         activePlayerId = null;
-        viewsContainer.innerHTML = '<div class="empty-state"><p>No matches saved.</p></div>';
     }
 
     renderApp();
@@ -222,16 +283,12 @@ async function manualRefresh() {
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
-    // 1. Load saved matches from disk first
     const saved = await window.api.loadSavedMatches();
     if (saved && Array.isArray(saved)) {
         saved.forEach(m => matchCache.set(m.matchId, m));
     }
-
-    // 2. Fetch live match
     await manualRefresh();
 
-    // 3. Listen for automated background polling
     window.api.onLobbyUpdated((payload) => {
         handleLobbyPayload(payload);
     });
