@@ -1,7 +1,6 @@
 const { app, BrowserWindow, ipcMain, session: electronSession, globalShortcut } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
-const fsSync = require('fs');
 const https = require('https');
 const axios = require('axios');
 
@@ -33,16 +32,11 @@ async function fetchMapNames() {
 function resolveMapName(rawMapName) {
     if (!rawMapName) return 'Unknown Map';
     const codeName = rawMapName.split('/').pop().toLowerCase();
-
-    if (mapNameCache[codeName]) {
-        return mapNameCache[codeName];
-    }
-
-    return codeName.charAt(0).toUpperCase() + codeName.slice(1);
+    return mapNameCache[codeName] || (codeName.charAt(0).toUpperCase() + codeName.slice(1));
 }
 
 async function getMatchesDir() {
-    if (matchesDir) return matchesDir
+    if (matchesDir) return matchesDir;
     const dir = path.join(app.getPath('userData'), 'matches');
     try {
         await fs.mkdir(dir, { recursive: true });
@@ -56,11 +50,9 @@ async function getMatchesDir() {
 async function saveMatches(matchData) {
     try {
         if (!matchData.matchId || matchData.matchId === 'menu') return;
-
         const safeMatchId = path.basename(matchData.matchId);
         const dir = await getMatchesDir();
         const filePath = path.join(dir, `${safeMatchId}.json`);
-
         await fs.writeFile(filePath, JSON.stringify(matchData, null, 2), 'utf8');
     } catch (e) {
         console.error('Error saving match:', e);
@@ -98,7 +90,6 @@ async function deleteSave(matchID) {
         const safeMatchId = path.basename(matchID);
         const dir = await getMatchesDir();
         const filePath = path.join(dir, `${safeMatchId}.json`);
-
         await fs.unlink(filePath);
         return true;
     } catch (e) {
@@ -117,17 +108,9 @@ async function getLockfile() {
         throw new Error(`Lockfile not found at ${filePath}.`);
     }
 
-    let content = '';
-    try {
-        content = await fs.readFile(filePath, 'utf8');
-    } catch (e) {
-        throw new Error('Lockfile is not readable.');
-    }
-
+    const content = await fs.readFile(filePath, 'utf8');
     const parts = content.split(':');
-    if (parts.length < 4) {
-        throw new Error('Lockfile format is invalid.');
-    }
+    if (parts.length < 4) throw new Error('Lockfile format is invalid.');
 
     const port = parts[2];
     const password = parts[3];
@@ -251,9 +234,7 @@ async function getPlayers() {
             playersData = matchData.data?.Players || [];
             playersData.forEach(p => {
                 rawTeamMap[p.Subject] = p.TeamID;
-                if (p.Subject === puuid) {
-                    myRawTeam = p.TeamID;
-                }
+                if (p.Subject === puuid) myRawTeam = p.TeamID;
             });
         }
 
@@ -313,14 +294,27 @@ function setupAdBlocker() {
         '*://*.nitropay.com/*'
     ];
 
-    const block = (sess) => {
+    const configureSession = (sess) => {
         sess.webRequest.onBeforeRequest({ urls: adDomains }, (details, callback) => {
             callback({ cancel: true });
         });
+
+        sess.webRequest.onBeforeSendHeaders(
+            { urls: ['*://*.tracker.gg/*'] },
+            (details, callback) => {
+                details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+                details.requestHeaders['Referer'] = 'https://tracker.gg/';
+                details.requestHeaders['Origin'] = 'https://tracker.gg';
+                delete details.requestHeaders['X-Requested-With'];
+                callback({ requestHeaders: details.requestHeaders });
+            }
+        );
     };
-    block(electronSession.defaultSession);
-    block(electronSession.fromPartition('persist:tracker'));
+
+    configureSession(electronSession.defaultSession);
+    configureSession(electronSession.fromPartition('persist:tracker'));
 }
+
 let lastMatchSignature = '';
 
 async function pollLobby() {
@@ -372,7 +366,8 @@ async function createWindow() {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
             contextIsolation: true,
-            webviewTag: true
+            webviewTag: true,
+            webSecurity: true
         }
     });
 
@@ -402,14 +397,10 @@ app.commandLine.appendSwitch('silent-debugger-extension-api');
 app.whenReady().then(createWindow);
 
 app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-        createWindow();
-    }
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
 
-app.on('will-quit', () => {
-    globalShortcut.unregisterAll();
-});
+app.on('will-quit', () => globalShortcut.unregisterAll());
 
 app.on('window-all-closed', () => {
     stopPolling();
@@ -425,10 +416,21 @@ ipcMain.handle('fetch-players', async () => {
     }
 });
 
-ipcMain.handle('load-saved-matches', async () => {
-    return await loadMatches();
-});
+ipcMain.handle('load-saved-matches', async () => await loadMatches());
 
-ipcMain.handle('delete-match', async (_event, matchId) => {
-    return await deleteSave(matchId);
+ipcMain.handle('delete-match', async (_event, matchId) => await deleteSave(matchId));
+
+ipcMain.handle('fetch-tracker-match', async (_event, matchId) => {
+    try {
+        const res = await axios.get(`https://api.tracker.gg/api/v2/valorant/standard/matches/${matchId}`, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                'Referer': 'https://tracker.gg/',
+                'Origin': 'https://tracker.gg'
+            }
+        });
+        return { success: true, data: res.data };
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
 });

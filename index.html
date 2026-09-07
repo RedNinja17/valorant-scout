@@ -4,6 +4,8 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:;">
     <title>Valorant Scout</title>
     <link rel="stylesheet" href="style.css" />
 </head>
@@ -33,26 +35,11 @@
     <nav id="player-tabs-bar" aria-label="Players in this match"></nav>
 
     <main id="content">
-        <section id="match-overview" hidden>
-            <header class="overview-head">
-                <h2 id="overview-map">Match</h2>
-                <p id="overview-meta"></p>
-                <webview id="match-webview" partition="persist:tracker"></webview>
-            </header>
-
-            <div class="rosters">
-                <section class="roster roster-ally">
-                    <h3 class="roster-title">Your team</h3>
-                    <ol class="roster-list" id="roster-ally"></ol>
-                </section>
-
-                <div class="roster-divider"><span>VS</span></div>
-
-                <section class="roster roster-enemy">
-                    <h3 class="roster-title">Enemy team</h3>
-                    <ol class="roster-list" id="roster-enemy"></ol>
-                </section>
-            </div>
+        <section id="match-overview">
+            <webview id="match-webview" partition="persist:tracker"
+                useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+                allowpopups disablewebsecurity>
+            </webview>
         </section>
 
         <div id="views-container"></div>

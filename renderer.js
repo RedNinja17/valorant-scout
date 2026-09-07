@@ -13,9 +13,7 @@ function viewIdFor(matchId, puuid) {
 
 function touchView(viewId) {
     const i = view_order.indexOf(viewId);
-    if (i !== -1) {
-        view_order.splice(i, 1);
-    }
+    if (i !== -1) view_order.splice(i, 1);
     view_order.push(viewId);
 }
 
@@ -23,17 +21,13 @@ function destroyView(viewId) {
     const el = document.getElementById(viewId);
     if (el) el.remove();
     const i = view_order.indexOf(viewId);
-    if (i !== -1) {
-        view_order.splice(i, 1);
-    }
+    if (i !== -1) view_order.splice(i, 1);
 }
 
 function evictStaleViews() {
     const container = document.getElementById('views-container');
     container.querySelectorAll('webview').forEach(v => {
-        if (v.dataset.matchId !== activeMatchId) {
-            destroyView(v.id);
-        }
+        if (v.dataset.matchId !== activeMatchId) destroyView(v.id);
     });
     const keep = viewIdFor(activeMatchId, activePlayerId);
     while (view_order.length > MAX_LIVE_VIEWS) {
@@ -137,9 +131,7 @@ function handleLobbyPayload(payload) {
         activePlayerId = null;
     }
 
-    if (!userSelectedMatch) {
-        activeMatchId = key;
-    }
+    if (!userSelectedMatch) activeMatchId = key;
 
     const active = matchCache.get(activeMatchId);
     if (active && (!activePlayerId || !active.players.some(p => p.puuid === activePlayerId))) {
@@ -147,7 +139,6 @@ function handleLobbyPayload(payload) {
     }
 
     setStatus(true, `Active — ${players.length} players`);
-
     renderApp();
 }
 
@@ -233,61 +224,39 @@ function renderPlayerTabsBar() {
         btn.appendChild(nameSpan);
 
         btn.onclick = () => openPlayer(player.puuid);
-
         tabsBar.appendChild(btn);
     });
 }
 
 function renderOverview() {
     const overview = document.getElementById('match-overview');
+    const overviewBtn = document.getElementById('overview-btn');
     const match = matchCache.get(activeMatchId);
 
     if (!match || !showOverview) {
-        overview.hidden = true;
+        overview.classList.remove('active');
+        if (overviewBtn) overviewBtn.classList.remove('active');
         return;
     }
 
-    overview.hidden = false;
+    overview.classList.add('active');
+    if (overviewBtn) overviewBtn.classList.add('active');
 
     const matchWebview = document.getElementById('match-webview');
     if (matchWebview && match.matchId && match.matchId !== 'menu') {
         const matchUrl = `https://tracker.gg/valorant/match/${match.matchId}`;
+
+        if (!matchWebview.dataset.listenersAttached) {
+            matchWebview.dataset.listenersAttached = "true";
+            matchWebview.addEventListener('did-fail-load', (e) => {
+                console.error('Match webview failed to load:', e);
+            });
+        }
+
         if (matchWebview.src !== matchUrl) {
             matchWebview.src = matchUrl;
         }
     }
-}
-
-function buildPlayerCard(player) {
-    const isSelf = isSelfPlayer(player);
-
-    const li = document.createElement('li');
-    li.className = `player-card${isSelf ? ' is-self' : ''}`;
-
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'player-card-btn';
-
-    const nameEl = document.createElement('span');
-    nameEl.className = 'player-card-name';
-    nameEl.innerText = displayNameFor(player);
-
-    const tagEl = document.createElement('span');
-    tagEl.className = 'player-card-tag';
-    tagEl.innerText = `#${player.tag}`;
-
-    btn.append(nameEl, tagEl);
-
-    if (isSelf) {
-        const badge = document.createElement('span');
-        badge.className = 'player-card-badge';
-        badge.innerText = 'YOU';
-        btn.appendChild(badge);
-    }
-
-    btn.onclick = () => openPlayer(player.puuid);
-    li.appendChild(btn);
-    return li;
 }
 
 function openPlayer(puuid) {
@@ -301,10 +270,14 @@ function syncWebviewVisibility() {
     const currentMatch = matchCache.get(activeMatchId);
 
     if (showOverview && currentMatch) {
+        container.classList.remove('active');
         container.querySelectorAll('webview').forEach(v => v.classList.remove('active'));
         clearEmptyState();
         return;
     }
+
+    container.classList.add('active');
+
     if (!currentMatch || !activePlayerId) {
         showEmptyState(matchCache.size === 0 ? "No matches saved." : "No active match.");
         return;
@@ -326,6 +299,11 @@ function syncWebviewVisibility() {
         webview.dataset.matchId = activeMatchId;
         webview.dataset.puuid = player.puuid;
         webview.setAttribute('partition', 'persist:tracker');
+        webview.setAttribute(
+            'useragent',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+        );
+        webview.setAttribute('allowpopups', '');
         container.appendChild(webview);
     }
 
@@ -365,8 +343,14 @@ async function deleteActiveMatch() {
 }
 
 function goBackInActiveTab() {
-    if (!activeMatchId || !activePlayerId) return;
-    const activeWebview = document.getElementById(viewIdFor(activeMatchId, activePlayerId));
+    let activeWebview = null;
+
+    if (showOverview) {
+        activeWebview = document.getElementById('match-webview');
+    } else if (activeMatchId && activePlayerId) {
+        activeWebview = document.getElementById(viewIdFor(activeMatchId, activePlayerId));
+    }
+
     if (activeWebview && typeof activeWebview.goBack === 'function' && activeWebview.canGoBack()) {
         activeWebview.goBack();
     }
