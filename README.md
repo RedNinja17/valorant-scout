@@ -15,22 +15,23 @@ List any required software and minimum versions (e.g., Node.js >= 18.0.0).
 ### Installation
 
 ```bash
-git clone https://github.com
-cd project-name
-npm install
+git clone https://github.com/RedNinja17/valorant-scout.git # Clone GitHub repository into folder.
+cd valorant-scout # Go into the directory.
+npm install # Install dependencies
 ```
 
 ## Usage
 
-Show how to run or use the tool. Provide a quick-start example:
-
-```javascript
-import { nativeFeature } from 'project-name';
-
-// Run the core function
-const result = nativeFeature();
-console.log(result);
+### Testing
+```bash
+npm start # Run the application.
 ```
+### Downloading
+```bash
+npm run dist # Start compiling the .exe
+```
+Then look inside the new 'dist' folder for **insert name of file**. Run the installer for the application.
+When a new version comes out, run the aforementioned command again and re-run the installer. the same .exe is used so taskbar or desktop pins save.
 
 
 ## License
