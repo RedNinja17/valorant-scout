@@ -4,14 +4,14 @@
 
 ## Features
 
-- **Ovewview:** The main 'landing' page for each match is the overview. Since there is no tracker.gg match page while it is playing out, you will see a quick overview for the players on your team and the enemy team, and their ranks and levels, so long as they are public.
+- **Overview:** The main 'landing' page for each match is the overview. Since there is no tracker.gg match page while it is playing out, you will see a quick overview for the players on your team and the enemy team, and their ranks and levels, so long as they are public.
 - **Players:** At the top you can access tracker.gg pages for each individual player in your match for a greater look at each player.
 - **Match Saving:** Matches and the players are automatically saved. You can delete saved matches.
 - **Buttons:**
--- **Overview:** Takes you to the match overview as mentioned above.
--- **Back:** Takes you back to the main page of the player or match selected if you accidentally clicked off.
--- **Sync:** Re-syncs your Valorant and Valorant Scout if it hasn't yet loaded.
--- **Delete Match:** Deletes the currently selected match from your save file.
+  - **Overview:** Takes you to the match overview as mentioned above.
+  - **Back:** Takes you back to the main page of the player or match selected if you accidentally clicked off.
+  - **Sync:** Re-syncs your Valorant and Valorant Scout if it hasn't yet loaded.
+  - **Delete Match:** Deletes the currently selected match from your save file.
 
 ## Getting Started
 
