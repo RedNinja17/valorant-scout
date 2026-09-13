@@ -1,7 +1,7 @@
 {
   "name": "valorant-scout",
   "version": "1.0.0",
-  "description": "Desktop Electron app that loads other player's tracker.gg inside tabs.",
+  "description": "Desktop Electron app showing live VALORANT match rosters with ranks, plus tracker.gg profiles.",
   "main": "main.js",
   "scripts": {
     "start": "electron .",

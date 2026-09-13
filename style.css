@@ -207,7 +207,8 @@ body {
   display: flex;
   gap: 8px;
   overflow-x: auto;
-}
+  min-width: 0;
+} 
 
 .date-group {
   display: flex;
@@ -217,6 +218,7 @@ body {
   padding: 4px 8px;
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.05);
+  flex-shrink: 0;
 }
 
 .date-label {
@@ -239,6 +241,8 @@ body {
   gap: 6px;
   align-items: center;
   transition: all 0.2s ease;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .match-tab-btn:hover {
@@ -263,7 +267,7 @@ body {
 #player-tabs-bar {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: safe center;
   background-color: var(--bg-surface);
   padding: 8px 12px;
   gap: 12px;
@@ -482,6 +486,10 @@ body {
   align-items: start;
 }
 
+.roster {
+  min-width: 0;
+}
+
 .roster-title {
   margin-bottom: 12px;
   font-size: 11px;
@@ -625,8 +633,18 @@ body {
 }
 
 .player-card-rank {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-weight: 700;
   color: var(--text-main);
+}
+
+.player-card-rank-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+  flex-shrink: 0;
 }
 
 .player-card-badge {

@@ -38,7 +38,7 @@ async function fetchCompetitiveTiers() {
         const latest = episodes[episodes.length - 1];
         const cache = {};
         (latest?.tiers || []).forEach(t => {
-            cache[t.tier] = t.tierName;
+            cache[t.tier] = { name: t.tierName, icon: t.smallIcon || null };
         });
         tierNameCache = cache;
     } catch (e) {
@@ -53,9 +53,13 @@ function resolveMapName(rawMapName) {
 }
 
 function tierNameFor(tier) {
-    const raw = tierNameCache[tier];
+    const raw = tierNameCache[tier]?.name;
     if (!raw) return 'Unranked';
     return raw.trim().toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function tierIconFor(tier) {
+    return tierNameCache[tier]?.icon || null;
 }
 
 async function getMatchesDir() {
@@ -196,6 +200,7 @@ async function fetchRank(puuid, pdUrl, remoteHeaders) {
         const rank = {
             tier: tier,
             tierName: tierNameFor(tier),
+            icon: tierIconFor(tier),
             rr: tier > 0 ? (latest?.RankedRatingAfterUpdate ?? null) : null
         };
 
@@ -208,11 +213,20 @@ async function fetchRank(puuid, pdUrl, remoteHeaders) {
 }
 
 function enrichWithRanks(payload, pdUrl, remoteHeaders) {
+    const signature = () => payload.players
+        .map(p => p.rank ? `${p.rank.tier}:${p.rank.rr}` : '')
+        .join(',');
+
+    const before = signature();
+
     Promise.all(payload.players.map(p => fetchRank(p.puuid, pdUrl, remoteHeaders)))
         .then(async (ranks) => {
             payload.players.forEach((p, i) => {
                 p.rank = ranks[i];
             });
+
+            if (signature() === before) return;
+
             await saveMatches(payload);
             if (main && !main.isDestroyed()) {
                 main.webContents.send('lobby-updated', payload);
@@ -313,12 +327,12 @@ async function getPlayers() {
                 incognito: p.PlayerIdentity?.Incognito ?? false
             };
         });
-        console.log('identity debug', playersData.map(p => ({
-            puuid: p.Subject.slice(0, 8),
-            level: p.PlayerIdentity?.AccountLevel,
-            hidden: p.PlayerIdentity?.HideAccountLevel,
-            incognito: p.PlayerIdentity?.Incognito
-        })));
+        // console.log('identity debug', playersData.map(p => ({
+        //     puuid: p.Subject.slice(0, 8),
+        //     level: p.PlayerIdentity?.AccountLevel,
+        //     hidden: p.PlayerIdentity?.HideAccountLevel,
+        //     incognito: p.PlayerIdentity?.Incognito
+        // })));
 
         const puuids = playersData.map(p => p.Subject);
         if (puuids.length === 0) return { matchId: null, mapName: 'Unknown', timestamp: Date.now(), players: [] };
@@ -527,17 +541,17 @@ ipcMain.handle('load-saved-matches', async () => await loadMatches());
 
 ipcMain.handle('delete-match', async (_event, matchId) => await deleteSave(matchId));
 
-ipcMain.handle('fetch-tracker-match', async (_event, matchId) => {
-    try {
-        const res = await axios.get(`https://api.tracker.gg/api/v2/valorant/standard/matches/${matchId}`, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-                'Referer': 'https://tracker.gg/',
-                'Origin': 'https://tracker.gg'
-            }
-        });
-        return { success: true, data: res.data };
-    } catch (err) {
-        return { success: false, error: err.message };
-    }
-});
+// ipcMain.handle('fetch-tracker-match', async (_event, matchId) => {
+//     try {
+//         const res = await axios.get(`https://api.tracker.gg/api/v2/valorant/standard/matches/${matchId}`, {
+//             headers: {
+//                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+//                 'Referer': 'https://tracker.gg/',
+//                 'Origin': 'https://tracker.gg'
+//             }
+//         });
+//         return { success: true, data: res.data };
+//     } catch (err) {
+//         return { success: false, error: err.message };
+//     }
+// });

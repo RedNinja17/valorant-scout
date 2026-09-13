@@ -185,7 +185,7 @@ function renderMatchHistoryBar() {
             const timeEl = document.createElement('span');
             timeEl.className = 'match-time';
             timeEl.innerText = new Date(match.timestamp)
-                .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 
             btn.append(mapEl, timeEl);
 
@@ -269,7 +269,7 @@ function renderOverview() {
 
     document.getElementById('overview-map').innerText = match.mapName || 'Match';
     document.getElementById('overview-meta').innerText =
-        `${match.players.length} players · ${new Date(match.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                `${match.players.length} players · ${new Date(match.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })}`;
 
     const ally = document.getElementById('roster-ally');
     const enemy = document.getElementById('roster-enemy');
@@ -348,9 +348,21 @@ function buildPlayerCard(player) {
     if (player.rank) {
         const rankEl = document.createElement('span');
         rankEl.className = 'player-card-rank';
-        rankEl.innerText = player.rank.rr === null
+
+        if (player.rank.icon) {
+            const rankImg = document.createElement('img');
+            rankImg.className = 'player-card-rank-icon';
+            rankImg.src = player.rank.icon;
+            rankImg.alt = '';
+            rankEl.appendChild(rankImg);
+        }
+
+        const rankText = document.createElement('span');
+        rankText.innerText = player.rank.rr === null
             ? player.rank.tierName
             : `${player.rank.tierName} · ${player.rank.rr} RR`;
+        rankEl.appendChild(rankText);
+
         metaRow.appendChild(rankEl);
     } else {
         metaRow.appendChild(skeleton('92px'));
@@ -436,7 +448,9 @@ function syncWebviewVisibility() {
 
 async function deleteActiveMatch() {
     if (!activeMatchId) return;
-
+    const match = matchCache.get(activeMatchId);
+    const label = match ? `${match.mapName} (${new Date(match.timestamp).toLocaleString()})` : 'this match';
+    if (!window.confirm(`Delete ${label}? This removes it from disk permanently.`)) return;
     const toDelete = activeMatchId;
     matchCache.delete(toDelete);
     userSelectedMatch = false;
