@@ -338,38 +338,33 @@ async function getPlayers() {
         const puuids = playersData.map(p => p.Subject);
         if (puuids.length === 0) return { matchId: null, mapName: 'Unknown', timestamp: Date.now(), players: [] };
 
-        const orderIndex = new Map(puuids.map((id, i) => [id, i]));
-
         const namesResponse = await axios.put(`${pdUrl}/name-service/v2/players`, puuids, { headers: remoteHeaders });
-        const validPlayers = (namesResponse.data || []).filter(p => p.GameName && p.TagLine);
 
-        const matchPlayers = validPlayers.map(p => {
-            const name = p.GameName;
-            const tag = p.TagLine;
-            const isSelf = p.Subject === puuid;
-            const actualTeam = rawTeamMap[p.Subject] || 'Unknown';
+        const nameMap = {};
+        (namesResponse.data || []).forEach(p => {
+            if (p.GameName && p.TagLine) nameMap[p.Subject] = { name: p.GameName, tag: p.TagLine };
+        });
+
+        const matchPlayers = playersData.map(p => {
             const identity = identityMap[p.Subject] || {};
+            const known = nameMap[p.Subject] || null;
+            const actualTeam = rawTeamMap[p.Subject] || 'Unknown';
 
             return {
-                name: name,
-                tag: tag,
+                name: known ? known.name : null,
+                tag: known ? known.tag : null,
                 team: actualTeam,
                 isMyTeam: actualTeam === myRawTeam,
-                isSelf: isSelf,
+                isSelf: p.Subject === puuid,
                 puuid: p.Subject,
                 agentId: identity.agentId || null,
                 accountLevel: identity.accountLevel ?? null,
                 incognito: identity.incognito ?? false,
                 rank: mmrCache.get(p.Subject) || null,
-                url: `https://tracker.gg/valorant/profile/riot/${encodeURIComponent(name)}%23${encodeURIComponent(tag)}/overview`
+                url: known
+                    ? `https://tracker.gg/valorant/profile/riot/${encodeURIComponent(known.name)}%23${encodeURIComponent(known.tag)}/overview`
+                    : null
             };
-        });
-
-        matchPlayers.sort((a, b) => {
-            const ai = orderIndex.has(a.puuid) ? orderIndex.get(a.puuid) : Number.MAX_SAFE_INTEGER;
-            const bi = orderIndex.has(b.puuid) ? orderIndex.get(b.puuid) : Number.MAX_SAFE_INTEGER;
-            if (ai !== bi) return ai - bi;
-            return a.puuid.localeCompare(b.puuid);
         });
 
         const teammates = matchPlayers

@@ -699,6 +699,32 @@ body {
   background: #3b4c5e;
 }
 
+.player-card.is-hidden .player-card-btn {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.player-card.is-hidden .player-card-btn:hover {
+  background: var(--bg-card);
+  transform: none;
+  box-shadow: none;
+}
+
+.player-card-private {
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.player-tab-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 [hidden] {
   display: none !important;
 }

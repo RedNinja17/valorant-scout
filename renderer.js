@@ -75,12 +75,12 @@ function setStatusText(message) {
 }
 
 function displayNameFor(player) {
+    if (!player.name) return player.incognito ? 'Incognito player' : 'Hidden player';
     return player.name.endsWith(' (You)') ? player.name.slice(0, -6) : player.name;
 }
-
 function isSelfPlayer(player) {
     if (typeof player.isSelf === 'boolean') return player.isSelf;
-    return player.name.endsWith(' (You)');
+    return typeof player.name === 'string' && player.name.endsWith(' (You)');
 }
 
 function formatDateHeader(timestamp) {
@@ -232,7 +232,11 @@ function renderPlayerTabsBar() {
             nameSpan.innerText = displayNameFor(player);
             btn.appendChild(nameSpan);
 
-            btn.onclick = () => openPlayer(player.puuid);
+            if (player.url) {
+                btn.onclick = () => openPlayer(player.puuid);
+            } else {
+                btn.disabled = true;
+            }
             teamGroup.appendChild(btn);
         });
 
@@ -310,7 +314,7 @@ function buildPlayerCard(player) {
     const isSelf = isSelfPlayer(player);
 
     const li = document.createElement('li');
-    li.className = `player-card${isSelf ? ' is-self' : ''}`;
+    li.className = `player-card${isSelf ? ' is-self' : ''}${player.url ? '' : ' is-hidden'}`;
 
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -336,11 +340,14 @@ function buildPlayerCard(player) {
     nameEl.className = 'player-card-name';
     nameEl.innerText = displayNameFor(player);
 
-    const tagEl = document.createElement('span');
-    tagEl.className = 'player-card-tag';
-    tagEl.innerText = `#${player.tag}`;
+    nameRow.appendChild(nameEl);
 
-    nameRow.append(nameEl, tagEl);
+    if (player.tag) {
+        const tagEl = document.createElement('span');
+        tagEl.className = 'player-card-tag';
+        tagEl.innerText = `#${player.tag}`;
+        nameRow.appendChild(tagEl);
+    }
 
     const metaRow = document.createElement('span');
     metaRow.className = 'player-card-meta';
@@ -375,6 +382,13 @@ function buildPlayerCard(player) {
         metaRow.appendChild(lvlEl);
     }
 
+    if (!player.url) {
+        const priv = document.createElement('span');
+        priv.className = 'player-card-private';
+        priv.innerText = 'PRIVATE';
+        metaRow.appendChild(priv);
+    }
+
     main.append(nameRow, metaRow);
     btn.appendChild(main);
 
@@ -385,7 +399,11 @@ function buildPlayerCard(player) {
         btn.appendChild(badge);
     }
 
-    btn.onclick = () => openPlayer(player.puuid);
+    if (player.url) {
+        btn.onclick = () => openPlayer(player.puuid);
+    } else {
+        btn.disabled = true;
+    }
     li.appendChild(btn);
     return li;
 }
@@ -417,6 +435,10 @@ function syncWebviewVisibility() {
     const player = currentMatch.players.find(p => p.puuid === activePlayerId);
     if (!player) {
         showEmptyState("Player not found in this match.");
+        return;
+    }
+    if (!player.url) {
+        showEmptyState("This player's profile isn't available.");
         return;
     }
     clearEmptyState();

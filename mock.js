@@ -26,14 +26,14 @@ const ALLIES = [
     { name: 'Fixture', tag: 'dev', agentId: AGENTS.sage, accountLevel: 88, rank: rank(20, 'Diamond 3', 71) },
     { name: 'Placeholder', tag: '0001', agentId: AGENTS.omen, accountLevel: 401, rank: rank(22, 'Ascendant 2', 15) },
     { name: 'SampleUser', tag: 'EU', agentId: AGENTS.sova, accountLevel: null, rank: rank(20, 'Diamond 3', 33) },
-    { name: 'AVeryLongDisplayName', tag: 'LONG', agentId: AGENTS.killjoy, accountLevel: 9, rank: null }
+    { name: 'AVeryLongDisplayName', tag: 'LONG', agentId: AGENTS.killjoy, accountLevel: 9, rank: rank(11, 'Silver 3', 8) },
 ];
 
 const ENEMIES = [
     { name: 'Dummy', tag: 'NA2', agentId: AGENTS.reyna, accountLevel: 133, rank: rank(24, 'Immortal 1', 88) },
     { name: 'Stub', tag: 'jp', agentId: AGENTS.phoenix, accountLevel: 62, rank: rank(21, 'Ascendant 1', 5) },
     { name: 'Q', tag: 'x', agentId: AGENTS.raze, accountLevel: 720, rank: rank(17, 'Platinum 3', 60) },
-    { name: 'Mock', tag: 'test', agentId: AGENTS.breach, accountLevel: 17, rank: rank(14, 'Gold 3', 20) },
+    { name: null, tag: null, agentId: AGENTS.breach, accountLevel: null, rank: null },
     { name: 'Example', tag: 'NA1', agentId: AGENTS.cypher, accountLevel: 190, rank: rank(11, 'Silver 3', 49) }
 ];
 
@@ -49,7 +49,7 @@ function build(seed, isMyTeam, index) {
         accountLevel: seed.accountLevel ?? null,
         incognito: false,
         rank: seed.rank ?? null,
-        url: profileUrl(seed.name, seed.tag)
+        url: seed.name ? profileUrl(seed.name, seed.tag) : null
     };
 }
 

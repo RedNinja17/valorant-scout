@@ -2,6 +2,14 @@
 
 > Windows app that automatically loads tracker.gg webpages for your Valorant game.
 
+<p align="center">
+  <img src="docs/images/overview.png" width="860" alt="Match overview showing both teams with ranks, agents, and account levels">
+</p>
+
+<p align="center">
+  <em>Every player in your match, with rank and level, the moment the game starts.</em>
+</p>
+
 ## Features
 
 - **Overview:** The main 'landing' page for each match is the overview. Since there is no tracker.gg match page while it is playing out, you will see a quick overview for the players on your team and the enemy team, and their ranks and levels, so long as they are public.
@@ -13,15 +21,9 @@
   - **Sync:** Re-syncs your Valorant and Valorant Scout if it hasn't yet loaded.
   - **Delete Match:** Deletes the currently selected match from your save file.
 
-## Screenshots
-
-<img src="docs/images/overview.png" width="800" alt="Match overview showing both teams with ranks, agents, and account levels">
-
-Every player in your match, with rank and level, the moment the game starts.
-
 | Agent select | Player profile |
-| --- | --- |
-| <img src="docs/images/agent-select.png" width="400" alt="Agent select showing only your team"> | <img src="docs/images/player-profile.png" width="400" alt="A player's tracker.gg profile loaded in-app"> |
+| :---: | :---: |
+| <img src="docs/images/agent-select.png" width="420" alt="Agent select showing only your team"> | <img src="docs/images/player-profile.png" width="420" alt="A player's tracker.gg profile loaded in-app"> |
 
 During agent select, only your own team is available since Riot doesn't expose the enemy team until the match begins.
 
@@ -42,18 +44,22 @@ npm install # Install dependencies
 ## Usage
 
 ### Testing
+
 ```bash
 npm start # Run the application.
 ```
+
 ### Downloading
+
 ```bash
 npm run dist # Start compiling the .exe
 ```
-Then look inside the new 'dist' folder for **insert name of file**. Run the installer for the application.
+
+Then look inside the new 'dist' folder for **valorant-scout Setup 1.0.0.exe**. Run the installer for the application.
 When a new version comes out, run the aforementioned command again and re-run the installer. the same .exe is used so taskbar or desktop pins save.
 
-
 ## License
+
 Not endorsed by Riot Games. Riot Games and VALORANT are trademarks of Riot Games, Inc.
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
