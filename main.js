@@ -236,6 +236,7 @@ function enrichWithRanks(payload, pdUrl, remoteHeaders) {
 }
 
 async function getPlayers() {
+    if (process.env.MOCK) return require('./mock').mockPayload(process.env.MOCK);
     try {
         const { accessToken, entitlementsToken, puuid, region, clientVersion } = await getAuthTokens();
 

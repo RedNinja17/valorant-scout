@@ -13,6 +13,18 @@
   - **Sync:** Re-syncs your Valorant and Valorant Scout if it hasn't yet loaded.
   - **Delete Match:** Deletes the currently selected match from your save file.
 
+## Screenshots
+
+<img src="docs/images/overview.png" width="800" alt="Match overview showing both teams with ranks, agents, and account levels">
+
+Every player in your match, with rank and level, the moment the game starts.
+
+| Agent select | Player profile |
+| --- | --- |
+| <img src="docs/images/agent-select.png" width="400" alt="Agent select showing only your team"> | <img src="docs/images/player-profile.png" width="400" alt="A player's tracker.gg profile loaded in-app"> |
+
+During agent select, only your own team is available since Riot doesn't expose the enemy team until the match begins.
+
 ## Getting Started
 
 ### Prerequisites
