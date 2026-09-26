@@ -111,7 +111,7 @@ function handleLobbyPayload(payload) {
         return;
     }
 
-    const { matchId, mapName, players, timestamp } = payload;
+    const { matchId, mapName, players, timestamp, queueId, modeId, isFreeForAll } = payload;
 
     if (!matchId || matchId === 'menu') {
         setStatus(false, matchId === 'menu' ? "In Menu." : "No match found.");
@@ -125,10 +125,16 @@ function handleLobbyPayload(payload) {
         const existing = matchCache.get(key);
         existing.players = players;
         existing.mapName = mapName || existing.mapName;
+        existing.queueId = queueId ?? existing.queueId ?? null;
+        existing.modeId = modeId ?? existing.modeId ?? null;
+        existing.isFreeForAll = isFreeForAll === true;
     } else {
         matchCache.set(key, {
             matchId: key,
             mapName: mapName || 'Match',
+            queueId: queueId ?? null,
+            modeId: modeId ?? null,
+            isFreeForAll: isFreeForAll === true,
             timestamp: timestamp || Date.now(),
             players: players
         });
@@ -216,11 +222,11 @@ function renderPlayerTabsBar() {
     const allyPlayers = players.filter(p => p.isMyTeam);
     const enemyPlayers = players.filter(p => !p.isMyTeam);
 
-    function createTeamGroup(teamPlayers, isAlly) {
+    function createTeamGroup(teamPlayers, groupClass) {
         if (teamPlayers.length === 0) return;
 
         const teamGroup = document.createElement('div');
-        teamGroup.className = `team-glass-pill ${isAlly ? 'ally-group' : 'enemy-group'}`;
+        teamGroup.className = `team-glass-pill ${groupClass}`;
 
         teamPlayers.forEach(player => {
             const btn = document.createElement('button');
@@ -243,7 +249,12 @@ function renderPlayerTabsBar() {
         tabsBar.appendChild(teamGroup);
     }
 
-    createTeamGroup(allyPlayers, true);
+    if (currentMatch.isFreeForAll) {
+        createTeamGroup(players, 'ffa-group');
+        return;
+    }
+
+    createTeamGroup(allyPlayers, 'ally-group');
 
     if (allyPlayers.length > 0 && enemyPlayers.length > 0) {
         const divider = document.createElement('div');
@@ -251,7 +262,7 @@ function renderPlayerTabsBar() {
         tabsBar.appendChild(divider);
     }
 
-    createTeamGroup(enemyPlayers, false);
+    createTeamGroup(enemyPlayers, 'enemy-group');
 }
 
 function renderOverview() {
@@ -272,17 +283,28 @@ function renderOverview() {
     matchPage.classList.toggle('active', overviewTab === 'match');
 
     document.getElementById('overview-map').innerText = match.mapName || 'Match';
-    document.getElementById('overview-meta').innerText =
-                `${match.players.length} players · ${new Date(match.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })}`;
+    document.getElementById('overview-meta').innerText = `${match.players.length} players · ${new Date(match.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })}`;
+
+    const ffa = match.isFreeForAll === true;
+    const rosters = document.querySelector('.rosters');
+    const ffaList = document.getElementById('roster-ffa');
 
     const ally = document.getElementById('roster-ally');
     const enemy = document.getElementById('roster-enemy');
     ally.innerHTML = '';
     enemy.innerHTML = '';
+    ffaList.innerHTML = '';
 
-    match.players.forEach(player => {
-        (player.isMyTeam ? ally : enemy).appendChild(buildPlayerCard(player));
-    });
+    rosters.hidden = ffa;
+    ffaList.hidden = !ffa;
+
+    if (ffa) {
+        match.players.forEach(player => ffaList.appendChild(buildPlayerCard(player)));
+    } else {
+        match.players.forEach(player => {
+            (player.isMyTeam ? ally : enemy).appendChild(buildPlayerCard(player));
+        });
+    }
 
     if (overviewTab === 'match') syncMatchPage(match);
 }

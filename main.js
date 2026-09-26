@@ -317,6 +317,12 @@ async function getPlayers() {
             });
         }
 
+        const distinctTeams = new Set(Object.values(rawTeamMap));
+        const modeString = `${matchData.data?.ModeID || ''} ${matchData.data?.MatchmakingData?.QueueID || ''}`.toLowerCase();
+        const isFreeForAll = distinctTeams.size > 2 || /deathmatch|gauntlet|ffa/.test(modeString);
+
+        console.log('mode debug', matchData.data?.ModeID, matchData.data?.MatchmakingData?.QueueID, 'teams:', [...distinctTeams]);
+
         const identityMap = {};
         playersData.forEach(p => {
             const level = p.PlayerIdentity?.AccountLevel;
@@ -367,15 +373,25 @@ async function getPlayers() {
             };
         });
 
-        const teammates = matchPlayers
-            .filter(p => p.isMyTeam)
-            .sort((a, b) => (b.isSelf ? 1 : 0) - (a.isSelf ? 1 : 0));
-        const opponents = matchPlayers.filter(p => !p.isMyTeam);
-        const sortedPlayers = [...teammates, ...opponents];
+        let sortedPlayers;
+        if (isFreeForAll) {
+            sortedPlayers = matchPlayers
+                .slice()
+                .sort((a, b) => (b.isSelf ? 1 : 0) - (a.isSelf ? 1 : 0));
+        } else {
+            const teammates = matchPlayers
+                .filter(p => p.isMyTeam)
+                .sort((a, b) => (b.isSelf ? 1 : 0) - (a.isSelf ? 1 : 0));
+            const opponents = matchPlayers.filter(p => !p.isMyTeam);
+            sortedPlayers = [...teammates, ...opponents];
+        }
 
         const payload = {
             matchId: matchId,
             mapName: resolveMapName(matchData.data?.MapID),
+            queueId: matchData.data?.MatchmakingData?.QueueID || null,
+            modeId: matchData.data?.ModeID || null,
+            isFreeForAll: isFreeForAll,
             timestamp: Date.now(),
             players: sortedPlayers
         };

@@ -54,6 +54,18 @@ function build(seed, isMyTeam, index) {
 }
 
 function mockPayload(mode) {
+    if (mode === 'ffa') {
+        return {
+            matchId: 'mock-ffa',
+            mapName: 'Bind',
+            queueId: 'deathmatch',
+            modeId: '/Game/GameModes/Deathmatch/DeathmatchGameMode.DeathmatchGameMode_C',
+            isFreeForAll: true,
+            timestamp: Date.now(),
+            players: [...ALLIES, ...ENEMIES].map((s, i) => build(s, true, i))
+        };
+    }
+
     const allies = ALLIES.map((s, i) => build(s, true, i));
     const enemies = mode === 'pregame' ? [] : ENEMIES.map((s, i) => build(s, false, i));
 
